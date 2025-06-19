@@ -32,3 +32,25 @@ Buy in Sushiswap and,
 Sell in Uniswap
 
 The transaction has to be atomic (all or nothing)
+
+#### Action Items
+
+##### Setup
+
+1. Create a trading wallet in metamask and export private key.
+2. Connect to ethereum network using go-ethereum package. (Best connect to direct ethereum node)
+
+##### Interacting with dex
+
+3. Generate a contract binding to Uniswap and Sushiswap using abigen.
+
+##### Build arbitrage logic
+
+4. Frequently check the price for arbitrage opportunity.
+
+##### Execute the trade
+
+- build and sign the transaction
+-
+
+2. Sign a transaction in the script and send it to blockchain using go-ethereum.
