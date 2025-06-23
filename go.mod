@@ -2,7 +2,10 @@ module github.com/sagarkarki99/arbitrator
 
 go 1.23.3
 
-require github.com/ethereum/go-ethereum v1.15.11
+require (
+	github.com/ethereum/go-ethereum v1.15.11
+	github.com/joho/godotenv v1.5.1
+)
 
 require (
 	github.com/Microsoft/go-winio v0.6.2 // indirect
@@ -16,10 +19,11 @@ require (
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.0.1 // indirect
 	github.com/ethereum/c-kzg-4844/v2 v2.1.0 // indirect
 	github.com/ethereum/go-verkle v0.2.2 // indirect
+	github.com/fsnotify/fsnotify v1.6.0 // indirect
 	github.com/go-ole/go-ole v1.3.0 // indirect
+	github.com/google/uuid v1.3.0 // indirect
 	github.com/gorilla/websocket v1.4.2 // indirect
 	github.com/holiman/uint256 v1.3.2 // indirect
-	github.com/joho/godotenv v1.5.1 // indirect
 	github.com/mmcloughlin/addchain v0.4.0 // indirect
 	github.com/shirou/gopsutil v3.21.4-0.20210419000835-c7a38de76ee5+incompatible // indirect
 	github.com/supranational/blst v0.3.14 // indirect
