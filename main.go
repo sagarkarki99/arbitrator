@@ -22,7 +22,7 @@ func main() {
 	}()
 
 	pool := dex.NewUniswapV3Pool(cl)
-	priceChan, err := pool.GetPrice(dex.Uniswapv3SymbolToPool["ETH/USDT"])
+	priceChan, err := pool.GetPrice("WETH/USDT")
 	if err != nil {
 		slog.Error("Failed to get price", "error", err)
 		return
