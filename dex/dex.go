@@ -63,19 +63,22 @@ type PoolConfig struct {
 
 type Dex interface {
 	GetPrice(symbol string) (<-chan *Price, error)
+	GetPoolFee() float64
 	CreateTransaction(amount float64, symbol string, from string) (string, error)
 }
 
 func NewUniswapV3Pool(cl *ethclient.Client) Dex {
 	return &UniswapV3{
-		cl:  cl,
-		sub: make(map[string]chan *Price),
+		cl:          cl,
+		sub:         make(map[string]chan *Price),
+		platformFee: 0.003, // 0.3% fee for Uniswap V3
 	}
 }
 
 type UniswapV3 struct {
-	cl  *ethclient.Client
-	sub map[string]chan *Price
+	cl          *ethclient.Client
+	sub         map[string]chan *Price
+	platformFee float64
 }
 
 func (u *UniswapV3) GetPrice(symbol string) (<-chan *Price, error) {
@@ -129,6 +132,10 @@ func (u *UniswapV3) GetPrice(symbol string) (<-chan *Price, error) {
 
 func (u *UniswapV3) CreateTransaction(amount float64, symbol string, from string) (string, error) {
 	return "", nil
+}
+
+func (u *UniswapV3) GetPoolFee() float64 {
+	return u.platformFee
 }
 
 func CalculatePrice(sqrtPriceX96 *big.Int, config *PoolConfig, desiredPair string) float64 {

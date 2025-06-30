@@ -13,16 +13,18 @@ import (
 
 func NewPancakeswapV2Pool(client *ethclient.Client) Dex {
 	pool := &PancakeswapV2Pool{
-		cl:   client,
-		subs: make(map[string]chan *Price),
+		cl:          client,
+		subs:        make(map[string]chan *Price),
+		platformFee: 0.002, // 0.2% platform fee
 	}
 
 	return pool
 }
 
 type PancakeswapV2Pool struct {
-	cl   *ethclient.Client
-	subs map[string]chan *Price
+	cl          *ethclient.Client
+	subs        map[string]chan *Price
+	platformFee float64
 }
 
 func (p *PancakeswapV2Pool) GetPrice(symbol string) (<-chan *Price, error) {
@@ -87,4 +89,8 @@ func (p *PancakeswapV2Pool) GetPrice(symbol string) (<-chan *Price, error) {
 func (p *PancakeswapV2Pool) CreateTransaction(amount float64, symbol string, from string) (string, error) {
 	// Implement transaction creation logic here
 	return "", nil
+}
+
+func (p *PancakeswapV2Pool) GetPoolFee() float64 {
+	return p.platformFee
 }
