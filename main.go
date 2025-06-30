@@ -21,16 +21,25 @@ func main() {
 		cl.Close()
 	}()
 
-	pool := dex.NewUniswapV3Pool(cl)
-	priceChan, err := pool.GetPrice("WETH/USDT")
+	uniswap := dex.NewUniswapV3Pool(cl)
+	pancake := dex.NewPancakeswapV2Pool(cl)
+
+	uniswapPrice, err := uniswap.GetPrice("WETH/USDT")
 	if err != nil {
-		slog.Error("Failed to get price", "error", err)
-		return
+		slog.Error("Failed to get price from UNISWAP", "error", err)
+	}
+	pancakePrice, err := pancake.GetPrice("WETH/USDT")
+	if err != nil {
+		slog.Error("Failed to get price from PANCAKE", "error", err)
 	}
 
 	for {
-		price := <-priceChan
-		slog.Info("Received price update", "symbol", price.Symbol, "price", price.Price)
+		select {
+		case uPrice := <-uniswapPrice:
+			slog.Info("Received Uniswap price update", "symbol", uPrice.Symbol, "price", uPrice.Price, "liquidity", uPrice.Liquidity, "Liquidity statu", uPrice.LiquidityStatus)
+		case pPrice := <-pancakePrice:
+			slog.Info("Received Pancakeswap price update", "symbol", pPrice.Symbol, "price", pPrice.Price, "liquidity", pPrice.Liquidity, "Liquidity status", pPrice.LiquidityStatus)
+		}
 	}
 
 }

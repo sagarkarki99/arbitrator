@@ -12,12 +12,7 @@ import (
 	"github.com/sagarkarki99/arbitrator/contracts"
 )
 
-var Uniswapv3SymbolToPool = map[string]string{
-	"ETH/USDT":  "0x11b815efB8f581194ae79006d24E0d814B7697F6",
-	"WETH/USDT": "0x4e68Ccd3E89f51C3074ca5072bbAC773960dFa36",
-}
-
-var Pools = map[string]*PoolConfig{
+var Uniswapv3SymbolToPool = map[string]*PoolConfig{
 	"ETH/USDT": {
 		token0:         "ETH",
 		token1:         "USDT",
@@ -40,10 +35,22 @@ var Pools = map[string]*PoolConfig{
 		token1Decimals: 18,
 	},
 }
+var Pancakeswapv3SymbolToPool = map[string]*PoolConfig{
+	"WETH/USDT": {
+		token0:         "WETH",
+		token1:         "USDT",
+		token0Decimals: 18,
+		token1Decimals: 6,
+		Address:        "0x6CA298D2983aB03Aa1dA7679389D955A4eFEE15C",
+	},
+}
 
 type Price struct {
-	Symbol string
-	Price  float64
+	Pool            string
+	Symbol          string
+	Price           float64
+	Liquidity       *big.Int
+	LiquidityStatus string
 }
 
 type PoolConfig struct {
@@ -72,7 +79,7 @@ type UniswapV3 struct {
 }
 
 func (u *UniswapV3) GetPrice(symbol string) (<-chan *Price, error) {
-	config := Pools[symbol]
+	config := Uniswapv3SymbolToPool[symbol]
 	if u.sub[symbol] != nil {
 		return u.sub[symbol], nil
 	}
@@ -107,20 +114,12 @@ func (u *UniswapV3) GetPrice(symbol string) (<-chan *Price, error) {
 				return
 			case swapEvent := <-swapChan:
 
-				price := calculatePrice(swapEvent.SqrtPriceX96, config, symbol)
-				slog.Info("New swap event received",
-					"sender", swapEvent.Sender,
-					"receipent", swapEvent.Recipient,
-					"amount0", swapEvent.Amount0,
-					"amount1", swapEvent.Amount1,
-					"Liquidity", swapEvent.Liquidity,
-					"sqrtPriceX96", swapEvent.SqrtPriceX96,
-					"tick", swapEvent.Tick,
-					"calculated_price", price)
-
+				price := CalculatePrice(swapEvent.SqrtPriceX96, config, symbol)
 				priceChan <- &Price{
-					Symbol: symbol,
-					Price:  price,
+					Pool:      "Uniswap",
+					Symbol:    symbol,
+					Price:     price,
+					Liquidity: swapEvent.Liquidity,
 				}
 			}
 		}
@@ -132,7 +131,7 @@ func (u *UniswapV3) CreateTransaction(amount float64, symbol string, from string
 	return "", nil
 }
 
-func calculatePrice(sqrtPriceX96 *big.Int, config *PoolConfig, desiredPair string) float64 {
+func CalculatePrice(sqrtPriceX96 *big.Int, config *PoolConfig, desiredPair string) float64 {
 	// Convert sqrtPriceX96 to big.Float for precision
 	sqrtPriceX96Float := new(big.Float).SetInt(sqrtPriceX96)
 
@@ -164,3 +163,15 @@ func calculatePrice(sqrtPriceX96 *big.Int, config *PoolConfig, desiredPair strin
 
 	return adjustedPrice // This gives USDT per WETH
 }
+
+// {
+//     "timestamp": "2025/06/24 11:31:48",
+//     "level": "INFO",
+//     "message": "New swap event received",
+//     "sender": "0x66a9893cc07d91d95644aedd05d03f95e1dba8af",
+//     "amount0": 731413563172656263,
+//     "amount1": -1757750507,
+//     "sqrtPriceX96": 3889799402949823877143858,
+//     "tick": -198445,
+//     "calculated_price": 3436.90813798861
+// }
