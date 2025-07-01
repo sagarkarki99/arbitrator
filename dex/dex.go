@@ -9,57 +9,9 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/sagarkarki99/arbitrator/blockchain"
 	"github.com/sagarkarki99/arbitrator/contracts"
 )
-
-var Uniswapv3SymbolToPool = map[string]*PoolConfig{
-	"ETH/USDT": {
-		token0:         "ETH",
-		token1:         "USDT",
-		token0Decimals: 18,
-		token1Decimals: 6,
-		Address:        "0x11b815efB8f581194ae79006d24E0d814B7697F6",
-	},
-	"WETH/USDT": {
-		token0:         "WETH",
-		token1:         "USDT",
-		token0Decimals: 18,
-		token1Decimals: 6,
-		Address:        "0x4e68Ccd3E89f51C3074ca5072bbAC773960dFa36",
-	},
-	"WBTC/WETH": {
-		Address:        "0x4585FE77225b41b697C938B018E2Ac67Ac5a20c0",
-		token0:         "WBTC",
-		token1:         "WETH",
-		token0Decimals: 8,
-		token1Decimals: 18,
-	},
-}
-var Pancakeswapv3SymbolToPool = map[string]*PoolConfig{
-	"WETH/USDT": {
-		token0:         "WETH",
-		token1:         "USDT",
-		token0Decimals: 18,
-		token1Decimals: 6,
-		Address:        "0x6CA298D2983aB03Aa1dA7679389D955A4eFEE15C",
-	},
-}
-
-type Price struct {
-	Pool            string
-	Symbol          string
-	Price           float64
-	Liquidity       *big.Int
-	LiquidityStatus string
-}
-
-type PoolConfig struct {
-	token0         string
-	token1         string
-	token0Decimals int
-	token1Decimals int
-	Address        string
-}
 
 type Dex interface {
 	GetPrice(symbol string) (<-chan *Price, error)
@@ -82,11 +34,17 @@ type UniswapV3 struct {
 }
 
 func (u *UniswapV3) GetPrice(symbol string) (<-chan *Price, error) {
-	config := Uniswapv3SymbolToPool[symbol]
+	config := BnbUniswapv3SymbolToPool[symbol]
 	if u.sub[symbol] != nil {
 		return u.sub[symbol], nil
 	}
-	poolAddress := common.HexToAddress(config.Address)
+	var addr string
+	if blockchain.Network == blockchain.Mainnet {
+		addr = config.Address
+	} else {
+		addr = config.TestAddress
+	}
+	poolAddress := common.HexToAddress(addr)
 	pool, err := contracts.NewUniswapV3Pool(poolAddress, u.cl)
 	if err != nil {
 		slog.Error("Could not create uniswapv3pool")
@@ -150,7 +108,10 @@ func CalculatePrice(sqrtPriceX96 *big.Int, config *PoolConfig, desiredPair strin
 	price := new(big.Float).Mul(sqrtPrice, sqrtPrice)
 	priceFloat64, _ := price.Float64()
 
-	// Adjust for decimal differences
+	// Adjust for decimal differences: human-readable token1/token0 ratio
+	// The raw price returned by Uniswap is based on integer amounts,
+	// so we need to multiply by 10^(token0Decimals−token1Decimals)
+	// to account for the decimal places of each token.
 	decimalAdjustment := math.Pow(10, float64(config.token0Decimals-config.token1Decimals))
 	adjustedPrice := priceFloat64 * decimalAdjustment
 

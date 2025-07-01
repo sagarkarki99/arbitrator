@@ -8,6 +8,7 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi/bind/v2"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/sagarkarki99/arbitrator/blockchain"
 	"github.com/sagarkarki99/arbitrator/contracts"
 )
 
@@ -32,16 +33,24 @@ func (p *PancakeswapV2Pool) GetPrice(symbol string) (<-chan *Price, error) {
 		return sub, nil
 	}
 
-	config, exists := Pancakeswapv3SymbolToPool[symbol]
+	config, exists := BnbPancakev3SymbolToPool[symbol]
 	if !exists {
 		return nil, fmt.Errorf("no pool found for symbol %s", symbol)
 	}
-	pool, err := contracts.NewPancakeswapV3Pool(common.HexToAddress(config.Address), p.cl)
+
+	var addr string
+	if blockchain.Network == blockchain.Mainnet {
+		addr = config.Address
+	} else {
+		addr = config.TestAddress
+	}
+	poolAddress := common.HexToAddress(addr)
+	pool, err := contracts.NewPancakeswapV3Pool(poolAddress, p.cl)
 	if err != nil {
 		return nil, err
 	}
 
-	s, err := pool.ProtocolFees(nil)
+	s, _ := pool.ProtocolFees(nil)
 	slog.Info("Protocol fee", s.Token0, s.Token1)
 
 	swapChan := make(chan *contracts.PancakeswapV3PoolSwap)
