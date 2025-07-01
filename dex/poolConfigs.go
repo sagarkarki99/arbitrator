@@ -24,7 +24,7 @@ var BnbUniswapv3SymbolToPool = map[string]*PoolConfig{
 		token0:         "USDT",
 		token1:         "WBNB",
 		token0Decimals: 6,
-		token1Decimals: 8,
+		token1Decimals: 18,
 		Address:        "0x47a90A2d92A8367A91EfA1906bFc8c1E05bf10c4",
 	},
 }
@@ -34,7 +34,7 @@ var BnbPancakev3SymbolToPool = map[string]*PoolConfig{
 		token0:         "USDT",
 		token1:         "WBNB",
 		token0Decimals: 6,
-		token1Decimals: 8,
+		token1Decimals: 18,
 		Address:        "0x172fcD41E0913e95784454622d1c3724f546f849",
 	},
 }

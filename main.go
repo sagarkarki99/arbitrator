@@ -10,13 +10,16 @@ import (
 	"github.com/sagarkarki99/arbitrator/services"
 )
 
-func main() {
-	fmt.Println("Hello arbitrator")
-	godotenv.Load(
-		".env",
-	)
+func init() {
+	// Load .env before any package-level variables are initialized
+	godotenv.Load(".env")
+}
 
-	cl := blockchain.Connect(nil)
+func main() {
+
+	fmt.Println("Hello arbitrator")
+
+	cl := blockchain.Connect(blockchain.GetChains()["BscMainnetInfura"])
 	defer func() {
 		slog.Info("Closing client connection")
 		cl.Close()

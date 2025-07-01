@@ -2,9 +2,23 @@ package blockchain
 
 import (
 	"context"
+	"fmt"
+	"os"
+	"sync"
 
 	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/joho/godotenv"
 )
+
+var (
+	chains     map[string]*Network
+	chainsOnce sync.Once
+)
+
+func init() {
+	// Load .env before any package-level variables are initialized
+	fmt.Println("Initializing blockchain package")
+}
 
 type Network struct {
 	Network   string
@@ -13,20 +27,52 @@ type Network struct {
 	ChainName string
 }
 
-var Chains = map[string]*Network{
-	"BscMainnet": {
-		Network:   "mainnet",
-		WsUrl:     "wss://bsc-rpc.publicnode.com",
-		HttpUrl:   "https://bsc-rpc.publicnode.com",
-		ChainName: "BSC",
-	},
+func getChains() map[string]*Network {
+	chainsOnce.Do(func() {
+		// Load .env file
+		godotenv.Load(".env")
+
+		infuraAPIKey := os.Getenv("INFURA_API_KEY")
+
+		chains = map[string]*Network{
+			"BscMainnet": {
+				Network:   "mainnet",
+				WsUrl:     "wss://bsc-rpc.publicnode.com",
+				HttpUrl:   "https://bsc-rpc.publicnode.com",
+				ChainName: "BSC",
+			},
+			"BscMainnetInfura": {
+				Network:   "mainnet",
+				WsUrl:     "wss://bsc-mainnet.infura.io/ws/v3/" + infuraAPIKey,
+				HttpUrl:   "https://bsc-rpc.publicnode.com",
+				ChainName: "BSC",
+			},
+			"EthMainnet": {
+				Network:   "mainnet",
+				WsUrl:     "wss://mainnet.infura.io/ws/v3/" + infuraAPIKey,
+				HttpUrl:   "https://ethereum.publicnode.com",
+				ChainName: "Ethereum",
+			},
+		}
+	})
+	return chains
 }
-var ActiveChain = Chains["BscMainnet"]
+
+// Public getter for chains
+func GetChains() map[string]*Network {
+	return getChains()
+}
+
+var ActiveChain *Network
 
 func Connect(network *Network) *ethclient.Client {
 	if network != nil {
 		ActiveChain = network
+	} else {
+		// Use default chain if none provided
+		ActiveChain = getChains()["BscMainnet"]
 	}
+
 	cl, err := ethclient.DialContext(context.Background(), ActiveChain.WsUrl)
 	if err != nil {
 		panic(err)
