@@ -16,9 +16,9 @@ func main() {
 		".env",
 	)
 
-	cl := blockchain.Connect()
+	cl := blockchain.Connect(nil)
 	defer func() {
-		slog.Info("Closing Ethereum client connection")
+		slog.Info("Closing client connection")
 		cl.Close()
 	}()
 

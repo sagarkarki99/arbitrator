@@ -39,7 +39,7 @@ func (p *PancakeswapV2Pool) GetPrice(symbol string) (<-chan *Price, error) {
 	}
 
 	var addr string
-	if blockchain.Network == blockchain.Mainnet {
+	if blockchain.ActiveChain.Network == "mainnet" {
 		addr = config.Address
 	} else {
 		addr = config.TestAddress

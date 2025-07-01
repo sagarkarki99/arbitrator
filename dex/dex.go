@@ -39,7 +39,7 @@ func (u *UniswapV3) GetPrice(symbol string) (<-chan *Price, error) {
 		return u.sub[symbol], nil
 	}
 	var addr string
-	if blockchain.Network == blockchain.Mainnet {
+	if blockchain.ActiveChain.Network == "mainnet" {
 		addr = config.Address
 	} else {
 		addr = config.TestAddress

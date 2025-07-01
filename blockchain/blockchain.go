@@ -2,29 +2,35 @@ package blockchain
 
 import (
 	"context"
-	"log/slog"
 
 	"github.com/ethereum/go-ethereum/ethclient"
 )
 
-var Testnet = "bsc-testnet"
-var Mainnet = "bsc-mainnet"
-var Network = Mainnet
-
-type Blockchain interface {
-	Connect()
+type Network struct {
+	Network   string
+	WsUrl     string
+	HttpUrl   string
+	ChainName string
 }
 
-func Connect() *ethclient.Client {
-	// apiKey := os.Getenv("INFURA_API_KEY")
-	// wsUrl := fmt.Sprintf("wss://%s.infura.io/ws/v3/%s", Network, apiKey)
-	wsUrl := "wss://bsc-rpc.publicnode.com"
-	// wsUrl := "wss://bsc-testnet.drpc.org"
-	cl, err := ethclient.DialContext(context.Background(), wsUrl)
+var Chains = map[string]*Network{
+	"BscMainnet": {
+		Network:   "mainnet",
+		WsUrl:     "wss://bsc-rpc.publicnode.com",
+		HttpUrl:   "https://bsc-rpc.publicnode.com",
+		ChainName: "BSC",
+	},
+}
+var ActiveChain = Chains["BscMainnet"]
+
+func Connect(network *Network) *ethclient.Client {
+	if network != nil {
+		ActiveChain = network
+	}
+	cl, err := ethclient.DialContext(context.Background(), ActiveChain.WsUrl)
 	if err != nil {
 		panic(err)
 	}
-	slog.Info("Connected to BNB Chain client", "url", wsUrl)
 	return cl
 }
 
