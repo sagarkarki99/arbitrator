@@ -25,6 +25,7 @@ type Network struct {
 	WsUrl     string
 	HttpUrl   string
 	ChainName string
+	ChainID   int
 }
 
 func getChains() map[string]*Network {
@@ -40,18 +41,36 @@ func getChains() map[string]*Network {
 				WsUrl:     "wss://bsc-rpc.publicnode.com",
 				HttpUrl:   "https://bsc-rpc.publicnode.com",
 				ChainName: "BSC",
+				ChainID:   56,
+			},
+			"BscTestnet": {
+				Network:   "testnet",
+				WsUrl:     "wss://bsc-testnet-rpc.publicnode.com",
+				HttpUrl:   "https://bsc-testnet.bnbchain.org",
+				ChainName: "BSC testnet",
+				ChainID:   97,
+			},
+			"BscTestnetInfura": {
+				Network:   "testnet",
+				WsUrl:     "wss://bsc-testnet.infura.io/ws/v3/" + infuraAPIKey,
+				HttpUrl:   "https://bsc-testnet.infura.io/v3/" + infuraAPIKey,
+				ChainName: "BSC Testnet Infura",
+				ChainID:   97,
 			},
 			"BscMainnetInfura": {
 				Network:   "mainnet",
 				WsUrl:     "wss://bsc-mainnet.infura.io/ws/v3/" + infuraAPIKey,
 				HttpUrl:   "https://bsc-rpc.publicnode.com",
 				ChainName: "BSC",
+				ChainID:   56,
 			},
+
 			"EthMainnet": {
 				Network:   "mainnet",
 				WsUrl:     "wss://mainnet.infura.io/ws/v3/" + infuraAPIKey,
 				HttpUrl:   "https://ethereum.publicnode.com",
 				ChainName: "Ethereum",
+				ChainID:   1,
 			},
 		}
 	})
@@ -73,7 +92,7 @@ func Connect(network *Network) *ethclient.Client {
 		ActiveChain = getChains()["BscMainnet"]
 	}
 
-	cl, err := ethclient.DialContext(context.Background(), ActiveChain.WsUrl)
+	cl, err := ethclient.DialContext(context.Background(), ActiveChain.HttpUrl)
 	if err != nil {
 		panic(err)
 	}

@@ -1,6 +1,7 @@
 package dex
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"math"
@@ -8,9 +9,11 @@ import (
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/sagarkarki99/arbitrator/blockchain"
 	"github.com/sagarkarki99/arbitrator/contracts"
+	"github.com/sagarkarki99/arbitrator/keychain"
 )
 
 type Dex interface {
@@ -19,11 +22,12 @@ type Dex interface {
 	CreateTransaction(amount float64, symbol string, from string) (string, error)
 }
 
-func NewUniswapV3Pool(cl *ethclient.Client) Dex {
+func NewUniswapV3Pool(cl *ethclient.Client, kc keychain.Keychain) Dex {
 	return &UniswapV3{
 		cl:          cl,
 		sub:         make(map[string]chan *Price),
 		platformFee: 0.003, // 0.3% fee for Uniswap V3
+		kc:          kc,
 	}
 }
 
@@ -31,6 +35,7 @@ type UniswapV3 struct {
 	cl          *ethclient.Client
 	sub         map[string]chan *Price
 	platformFee float64
+	kc          keychain.Keychain
 }
 
 func (u *UniswapV3) GetPrice(symbol string) (<-chan *Price, error) {
@@ -88,7 +93,37 @@ func (u *UniswapV3) GetPrice(symbol string) (<-chan *Price, error) {
 	return priceChan, err
 }
 
-func (u *UniswapV3) CreateTransaction(amount float64, symbol string, from string) (string, error) {
+func (u *UniswapV3) CreateTransaction(amount float64, symbol string, to string) (string, error) {
+	receiver := common.HexToAddress(to)
+	sender := common.HexToAddress(keychain.Accounts[0])
+	nounce, _ := u.cl.PendingNonceAt(context.Background(), sender)
+
+	value := big.NewInt(int64(amount * 1e18))
+
+	slog.Info("Network ID", string(blockchain.ActiveChain.ChainID), "Nounce", nounce, "value", value)
+	suggestedFee, _ := u.cl.SuggestGasPrice(context.Background())
+
+	trx := types.NewTx(&types.DynamicFeeTx{
+		ChainID:   big.NewInt(int64(blockchain.ActiveChain.ChainID)),
+		Nonce:     nounce,
+		To:        &receiver,
+		GasFeeCap: big.NewInt(300_000_000), // 0.1 gwei
+		GasTipCap: big.NewInt(100_000_000), // 0.001 gwei
+		Value:     value,                   // Convert amount to wei
+	})
+
+	slog.Info("Suggested gas for transaction",
+		"fee", suggestedFee)
+
+	signedTx, err := u.kc.Sign(trx)
+	if err != nil {
+		return "", fmt.Errorf("failed to sign transaction: %w", err)
+	}
+	if err := u.cl.SendTransaction(context.Background(), signedTx); err != nil {
+		slog.Error("Failed to send transaction", "error", err)
+		return "", fmt.Errorf("failed to send transaction: %w", err)
+	}
+	slog.Info("Transaction sent", "hash", signedTx.Hash().Hex())
 	return "", nil
 }
 
@@ -131,15 +166,3 @@ func CalculatePrice(sqrtPriceX96 *big.Int, config *PoolConfig, desiredPair strin
 
 	return adjustedPrice // This gives USDT per WETH
 }
-
-// {
-//     "timestamp": "2025/06/24 11:31:48",
-//     "level": "INFO",
-//     "message": "New swap event received",
-//     "sender": "0x66a9893cc07d91d95644aedd05d03f95e1dba8af",
-//     "amount0": 731413563172656263,
-//     "amount1": -1757750507,
-//     "sqrtPriceX96": 3889799402949823877143858,
-//     "tick": -198445,
-//     "calculated_price": 3436.90813798861
-// }
