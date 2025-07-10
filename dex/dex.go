@@ -6,6 +6,8 @@ import (
 	"log/slog"
 	"math"
 	"math/big"
+	"math/rand/v2"
+	"time"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
@@ -19,7 +21,8 @@ import (
 type Dex interface {
 	GetPrice(symbol string) (<-chan *Price, error)
 	GetPoolFee() float64
-	CreateTransaction(amount float64, symbol string, from string) (string, error)
+	Buy(amount float64) (string, error)
+	Sell(amount float64) (string, error)
 }
 
 func NewUniswapV3Pool(cl *ethclient.Client, kc keychain.Keychain) Dex {
@@ -39,7 +42,7 @@ type UniswapV3 struct {
 }
 
 func (u *UniswapV3) GetPrice(symbol string) (<-chan *Price, error) {
-	config := BnbUniswapv3SymbolToPool[symbol]
+	config := BnbPancakeTestnetSymbolToPool[symbol]
 	if u.sub[symbol] != nil {
 		return u.sub[symbol], nil
 	}
@@ -73,27 +76,57 @@ func (u *UniswapV3) GetPrice(symbol string) (<-chan *Price, error) {
 			close(priceChan)
 			delete(u.sub, symbol)
 		}()
-		for {
-			select {
-			case err := <-sub.Err():
-				slog.Error("Subscription error", "error", err)
-				return
-			case swapEvent := <-swapChan:
-
-				price := CalculatePrice(swapEvent.SqrtPriceX96, config, symbol)
-				priceChan <- &Price{
-					Pool:      "Uniswap",
-					Symbol:    symbol,
-					Price:     price,
-					Liquidity: swapEvent.Liquidity,
-				}
+		for i := 0; i < 3; i++ {
+			price := (1000 + rand.Float64()*100)
+			time.Sleep(time.Second * 1)
+			priceChan <- &Price{
+				Pool:            "Uniswap",
+				Symbol:          symbol,
+				Price:           price,
+				Liquidity:       big.NewInt(int64(price * 1e18)), // Assuming price is in USD, convert to wei
+				LiquidityStatus: "high",
 			}
 		}
+		// for {
+		// 	select {
+		// 	case err := <-sub.Err():
+		// 		slog.Error("Subscription error", "error", err)
+		// 		return
+		// 	case swapEvent := <-swapChan:
+
+		// 		price := CalculatePrice(swapEvent.SqrtPriceX96, config, symbol)
+		// 		priceChan <- &Price{
+		// 			Pool:      "Uniswap",
+		// 			Symbol:    symbol,
+		// 			Price:     price,
+		// 			Liquidity: swapEvent.Liquidity,
+		// 		}
+		// 	}
+		// }
 	}()
 	return priceChan, err
 }
 
-func (u *UniswapV3) CreateTransaction(amount float64, symbol string, to string) (string, error) {
+func (u *UniswapV3) Buy(amount float64) (string, error) {
+	return u.createTransaction(amount, keychain.Accounts[0])
+}
+func (u *UniswapV3) Sell(amount float64) (string, error) {
+	return u.createTransaction(amount, keychain.Accounts[0])
+}
+
+func (u *UniswapV3) createTransaction(amount float64, to string) (string, error) {
+	// config := BnbUniswapv3SymbolToPool[symbol]
+	// var addr string
+	// if blockchain.ActiveChain.Network == "mainnet" {
+	// 	addr = config.Address
+	// } else {
+	// 	addr = config.TestAddress
+	// }
+	// poolAddress := common.HexToAddress(addr)
+	// pool, err := contracts.NewUniswapV3Pool(poolAddress, u.cl)
+
+	// //pool.swap will broadcast the swap
+
 	receiver := common.HexToAddress(to)
 	sender := common.HexToAddress(keychain.Accounts[0])
 	nounce, _ := u.cl.PendingNonceAt(context.Background(), sender)

@@ -92,7 +92,7 @@ func Connect(network *Network) *ethclient.Client {
 		ActiveChain = getChains()["BscMainnet"]
 	}
 
-	cl, err := ethclient.DialContext(context.Background(), ActiveChain.HttpUrl)
+	cl, err := ethclient.DialContext(context.Background(), ActiveChain.WsUrl)
 	if err != nil {
 		panic(err)
 	}
