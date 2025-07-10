@@ -33,6 +33,6 @@ func main() {
 	// time.Sleep(5 * time.Second)
 	// uniswap.GetPoolFee()
 	arbService := services.NewArbService(uniswap, pancake)
-	arbService.Start()
+	arbService.Start("USDT/WBNB")
 
 }

@@ -11,7 +11,8 @@ import (
 var Amount = 15.0
 
 type ArbService interface {
-	Start()
+	// Symbol is the trading pair symbol, e.g., "WETH/USDT"
+	Start(symbol string)
 }
 
 type ArbServiceImpl struct {
@@ -26,12 +27,12 @@ func NewArbService(dex1, dex2 dex.Dex) ArbService {
 	}
 }
 
-func (a *ArbServiceImpl) Start() {
-	price1, err := a.dex1.GetPrice("USDT/WBNB")
+func (a *ArbServiceImpl) Start(symbol string) {
+	price1, err := a.dex1.GetPrice(symbol)
 	if err != nil {
 		slog.Error("Failed to get price from UNISWAP", "error", err)
 	}
-	price2, err := a.dex2.GetPrice("BUSD/WBNB")
+	price2, err := a.dex2.GetPrice(symbol)
 	if err != nil {
 		slog.Error("Failed to get price from PANCAKE", "error", err)
 	}
