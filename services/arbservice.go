@@ -1,10 +1,10 @@
 package services
 
 import (
+	"fmt"
 	"log/slog"
 	"math"
 
-	"github.com/sagarkarki99/arbitrator/blockchain"
 	"github.com/sagarkarki99/arbitrator/dex"
 )
 
@@ -31,7 +31,7 @@ func (a *ArbServiceImpl) Start() {
 	if err != nil {
 		slog.Error("Failed to get price from UNISWAP", "error", err)
 	}
-	price2, err := a.dex2.GetPrice("USDT/WBNB")
+	price2, err := a.dex2.GetPrice("BUSD/WBNB")
 	if err != nil {
 		slog.Error("Failed to get price from PANCAKE", "error", err)
 	}
@@ -45,17 +45,23 @@ func (a *ArbServiceImpl) LookOpportunity(asset1, asset2 <-chan *dex.Price) {
 	lastPrice2 := 0.0
 	for {
 		select {
-		case asset1Price := <-asset1:
+		case asset1Price, isOpen := <-asset1:
+			if !isOpen {
+				return
+			}
 			slog.Info("Received price from dex1", "price", asset1Price.Price)
 			lastPrice1 = asset1Price.Price
-			if lastPrice2 != 0 && a.IsProfit(lastPrice1, lastPrice2) {
+			if lastPrice2 != 0 && a.IsSpreadProfitable(lastPrice1, lastPrice2) && a.IsProfit(lastPrice1, lastPrice2) {
 				PerformArbitrageTransaction(lastPrice1, lastPrice2)
 				// Perform arbitrage transaction
 			}
-		case asset2Price := <-asset2:
+		case asset2Price, isOpen := <-asset2:
+			if !isOpen {
+				return
+			}
 			slog.Info("Received price from dex2", "price", asset2Price.Price)
 			lastPrice2 = asset2Price.Price
-			if lastPrice1 != 0 && a.IsProfit(lastPrice2, lastPrice1) {
+			if lastPrice1 != 0 && a.IsSpreadProfitable(lastPrice1, lastPrice2) && a.IsProfit(lastPrice2, lastPrice1) {
 				// Perform arbitrage transaction
 			}
 		}
@@ -70,16 +76,79 @@ func PerformArbitrageTransaction(lastPrice1, lastPrice2 float64) {
 	}
 }
 
-func (a *ArbServiceImpl) IsProfit(price1, price2 float64) bool {
-	diff := math.Abs(price1 - price2)
-	gasFee, _ := blockchain.GetGasPrice()
+func (a *ArbServiceImpl) IsSpreadProfitable(price1, price2 float64) bool {
 
-	cost1 := (a.dex1.GetPoolFee() * price1) + float64(gasFee)
-	cost2 := (a.dex2.GetPoolFee() * price2) + float64(gasFee)
-	profit := diff - (cost1 + cost2)
-	if profit <= 1 {
-		// slog.Info("No profit opportunity found", "profit", profit, "price1", price1, "price2", price2)
-		return false
-	}
-	return true
+	totalFeePercent := (a.dex1.GetPoolFee() + a.dex2.GetPoolFee()) + 0.1
+	buyPrice := math.Min(price1, price2)
+	sellPrice := math.Max(price1, price2)
+	spreadPercent := ((sellPrice - buyPrice) / buyPrice) * 100
+	return spreadPercent >= totalFeePercent
+
 }
+
+func (a *ArbServiceImpl) IsProfit(price1, price2 float64) bool {
+
+	buyPrice := 0.0
+	sellPrice := 0.0
+	buyFee := 0.0
+	sellFee := 0.0
+	if price1 > price2 {
+		buyPrice = price2
+		sellPrice = price1
+		buyFee = a.dex2.GetPoolFee()
+		sellFee = a.dex1.GetPoolFee()
+	} else {
+		buyPrice = price1
+		sellPrice = price2
+		sellFee = a.dex2.GetPoolFee()
+		buyFee = a.dex1.GetPoolFee()
+	}
+	// -------BUYING ---------//
+	netBuyingSize := amountSize - (buyFee * amountSize)
+	tokenReceived := (1 / buyPrice) * netBuyingSize
+
+	// -------SELLING ---------//
+	netSellingSize := tokenReceived - (sellFee * tokenReceived)
+	baseToken := netSellingSize * sellPrice
+
+	// -------PROFIT CALCULATION ---------//
+
+	Profit := baseToken - amountSize - totalGasCost
+
+	fmt.Println("----------------------------------------------------")
+	slog.Info("Profit calculation",
+		"buyPrice", buyPrice,
+		"sellPrice", sellPrice,
+		"amountSize", amountSize,
+		"buyFee", buyFee,
+		"sellFee", sellFee,
+		"Profit", Profit,
+		"profitThreshold", profitThreshold)
+	fmt.Println("----------------------------------------------------")
+	return Profit >= profitThreshold
+}
+
+var totalGasCost = 0.0016
+var amountSize = 20000.0
+var profitThreshold = 2.00 // USDT
+// eg:
+//  WETH/USDT
+//  price1 = 1000
+//  price2 = 1050
+//  size = 500
+//  cost1 = 0.003 * 500 + 0.0002 (gas fee)
+// cost2= 0.003 * 500 + 0.0002 (gas fee)
+// diff = 10
+// size = 1000
+// profit = size * diff - (cost1 + cost2)
+
+// 1. make the transaction properties ready prehand:
+//    - recipent address (my bot address)
+//    - max gas limit (default 21000)
+//    - gas price (default 12 gwei)
+// 2. sign the transaction with private key
+// 3. ready to send the transaction
+// 4. Once there is a profit opportunity, send the transaction to the network
+// 5. wait for the transaction to be mined
+// 6. check the transaction receipt for success or failure
+// 7. if success, repeat 1. if failed: keep same tranasction for next opportunity.

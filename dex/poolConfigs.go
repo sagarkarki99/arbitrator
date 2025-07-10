@@ -39,6 +39,30 @@ var BnbPancakev3SymbolToPool = map[string]*PoolConfig{
 	},
 }
 
+var BnbPancakeTestnetSymbolToPool = map[string]*PoolConfig{
+	"WBNB/USDC": {
+		token0:         "WBNB",
+		token1:         "USDC",
+		token0Decimals: 18,
+		token1Decimals: 6,
+		TestAddress:    "0x172fcD41E0913e95784454622d1c3724f546f849",
+	},
+	"BUSD/WBNB": {
+		token0:         "BUSD",
+		token1:         "WBNB",
+		token0Decimals: 6,
+		token1Decimals: 18,
+		TestAddress:    "0x58C6Fc654b3deE6839b65136f61cB9120d96BCc6",
+	},
+	"USDT/WBNB": {
+		token0:         "BUSD",
+		token1:         "WBNB",
+		token0Decimals: 6,
+		token1Decimals: 18,
+		TestAddress:    "0x5F52Ad4bD4f519AE79999400ad8B83A3D002fD92",
+	},
+}
+
 var Uniswapv3SymbolToPool = map[string]*PoolConfig{
 	"ETH/USDT": {
 		token0:         "ETH",
