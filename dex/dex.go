@@ -1,5 +1,36 @@
 package dex
 
+// TOKEN SWAP EXPLANATION:
+//
+// This file implements Uniswap V3 token swaps. Here's how the swap process works:
+//
+// 1. POOL STRUCTURE:
+//    - Each pool has two tokens: token0 and token1
+//    - token0 has a lower address than token1 (Uniswap convention)
+//    - Example: WBNB/USDC pool has token0=WBNB, token1=USDC
+//
+// 2. SWAP DIRECTIONS:
+//    - zeroForOne = true:  token0 → token1 (e.g., WBNB → USDC)
+//    - zeroForOne = false: token1 → token0 (e.g., USDC → WBNB)
+//
+// 3. BUY vs SELL:
+//    - Buy():  Acquire token0 using token1 (zeroForOne = false)
+//    - Sell(): Acquire token1 using token0 (zeroForOne = true)
+//
+// 4. SWAP PARAMETERS:
+//    - recipient: Address to receive output tokens
+//    - zeroForOne: Swap direction (true/false)
+//    - amountSpecified: Input amount (positive for exact input)
+//    - sqrtPriceLimitX96: Price limit (0 = no limit)
+//    - data: Callback data (empty for simple swaps)
+//
+// 5. TRANSACTION FLOW:
+//    - Get pool configuration and address
+//    - Initialize pool contract
+//    - Calculate amount with proper decimals
+//    - Set up transaction options (gas, nonce, etc.)
+//    - Execute swap and return transaction hash
+
 import (
 	"context"
 	"fmt"
@@ -21,8 +52,8 @@ import (
 type Dex interface {
 	GetPrice(symbol string) (<-chan *Price, error)
 	GetPoolFee() float64
-	Buy(amount float64) (string, error)
-	Sell(amount float64) (string, error)
+	Buy(amount float64, symbol string) (string, error)
+	Sell(amount float64, symbol string) (string, error)
 }
 
 func NewUniswapV3Pool(cl *ethclient.Client, kc keychain.Keychain) Dex {
@@ -107,58 +138,134 @@ func (u *UniswapV3) GetPrice(symbol string) (<-chan *Price, error) {
 	return priceChan, err
 }
 
-func (u *UniswapV3) Buy(amount float64) (string, error) {
-	return u.createTransaction(amount, keychain.Accounts[0])
-}
-func (u *UniswapV3) Sell(amount float64) (string, error) {
-	return u.createTransaction(amount, keychain.Accounts[0])
-}
+// Helper function to perform swaps with common logic
+func (u *UniswapV3) performSwap(amount float64, symbol string, zeroForOne bool) (string, error) {
+	// Step 1: Get pool configuration
+	config := BnbPancakeTestnetSymbolToPool[symbol]
+	if config == nil {
+		return "", fmt.Errorf("pool configuration not found for symbol: %s", symbol)
+	}
 
-func (u *UniswapV3) createTransaction(amount float64, to string) (string, error) {
-	// config := BnbUniswapv3SymbolToPool[symbol]
-	// var addr string
-	// if blockchain.ActiveChain.Network == "mainnet" {
-	// 	addr = config.Address
-	// } else {
-	// 	addr = config.TestAddress
-	// }
-	// poolAddress := common.HexToAddress(addr)
-	// pool, err := contracts.NewUniswapV3Pool(poolAddress, u.cl)
+	// Step 2: Resolve pool address based on network
+	var addr string
+	if blockchain.ActiveChain.Network == "mainnet" {
+		addr = config.Address
+	} else {
+		addr = config.TestAddress
+	}
 
-	// //pool.swap will broadcast the swap
+	if addr == "" {
+		return "", fmt.Errorf("pool address not configured for symbol: %s", symbol)
+	}
 
-	receiver := common.HexToAddress(to)
-	sender := common.HexToAddress(keychain.Accounts[0])
-	nounce, _ := u.cl.PendingNonceAt(context.Background(), sender)
-
-	value := big.NewInt(int64(amount * 1e18))
-
-	slog.Info("Network ID", string(blockchain.ActiveChain.ChainID), "Nounce", nounce, "value", value)
-	suggestedFee, _ := u.cl.SuggestGasPrice(context.Background())
-
-	trx := types.NewTx(&types.DynamicFeeTx{
-		ChainID:   big.NewInt(int64(blockchain.ActiveChain.ChainID)),
-		Nonce:     nounce,
-		To:        &receiver,
-		GasFeeCap: big.NewInt(300_000_000), // 0.1 gwei
-		GasTipCap: big.NewInt(100_000_000), // 0.001 gwei
-		Value:     value,                   // Convert amount to wei
-	})
-
-	slog.Info("Suggested gas for transaction",
-		"fee", suggestedFee)
-
-	signedTx, err := u.kc.Sign(trx)
+	// Step 3: Initialize pool contract
+	poolAddress := common.HexToAddress(addr)
+	pool, err := contracts.NewUniswapV3Pool(poolAddress, u.cl)
 	if err != nil {
-		return "", fmt.Errorf("failed to sign transaction: %w", err)
+		slog.Error("Could not create uniswapv3pool", "error", err)
+		return "", fmt.Errorf("failed to create pool contract: %w", err)
 	}
-	if err := u.cl.SendTransaction(context.Background(), signedTx); err != nil {
-		slog.Error("Failed to send transaction", "error", err)
-		return "", fmt.Errorf("failed to send transaction: %w", err)
+
+	// Step 4: Set up transaction parameters
+	myAddress := common.HexToAddress(keychain.Accounts[0])
+
+	// Get nonce for transaction
+	nonce, err := u.cl.PendingNonceAt(context.Background(), myAddress)
+	if err != nil {
+		return "", fmt.Errorf("failed to get nonce: %w", err)
 	}
-	slog.Info("Transaction sent", "hash", signedTx.Hash().Hex())
-	return "", nil
+
+	// Get gas price
+	gasPrice, err := u.cl.SuggestGasPrice(context.Background())
+	if err != nil {
+		return "", fmt.Errorf("failed to get gas price: %w", err)
+	}
+
+	// Step 5: Calculate amount with proper decimals
+	var decimals int
+	var fromToken, toToken string
+
+	if zeroForOne {
+		// Selling token0 for token1
+		decimals = config.token0Decimals
+		fromToken = config.token0
+		toToken = config.token1
+	} else {
+		// Buying token0 with token1
+		decimals = config.token1Decimals
+		fromToken = config.token1
+		toToken = config.token0
+	}
+
+	decimalMultiplier := new(big.Float).SetInt(new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(decimals)), nil))
+	amountFloat := new(big.Float).SetFloat64(amount)
+	amountWithDecimals := new(big.Float).Mul(amountFloat, decimalMultiplier)
+
+	amountInDecimals := new(big.Int)
+	amountWithDecimals.Int(amountInDecimals) // Convert to big.Int
+
+	// Step 6: Prepare transaction options
+	auth := &bind.TransactOpts{
+		From:      myAddress,
+		Nonce:     big.NewInt(int64(nonce)),
+		Value:     big.NewInt(0), // No ETH value for token swaps
+		GasPrice:  gasPrice,
+		GasFeeCap: GasFeeCap,
+		GasTipCap: GasTipCap,
+		Signer: func(address common.Address, tx *types.Transaction) (*types.Transaction, error) {
+			return u.kc.Sign(tx)
+		},
+	}
+
+	tm := time.Now()
+	// Step 7: Execute the swap
+	tx, err := pool.Swap(
+		auth,
+		myAddress,        // recipient
+		zeroForOne,       // swap direction
+		amountInDecimals, // amountSpecified (exact input)
+		big.NewInt(0),    // sqrtPriceLimitX96 (no limit)
+		[]byte{},         // data (empty)
+	)
+
+	elasped := time.Since(tm)
+	slog.Info("Swap execution time", "duration", elasped)
+
+	if err != nil {
+		slog.Error("Failed to execute swap", "error", err)
+		return "", fmt.Errorf("failed to execute swap: %w", err)
+	}
+
+	slog.Info("Swap transaction submitted",
+		"hash", tx.Hash().Hex(),
+		"symbol", symbol,
+		"amount", amount,
+		"from_token", fromToken,
+		"to_token", toToken,
+		"zero_for_one", zeroForOne)
+
+	return tx.Hash().Hex(), nil
 }
+
+func (u *UniswapV3) Buy(amount float64, symbol string) (string, error) {
+	// Buy means: swap token1 (e.g., USDC) for token0 (e.g., WBNB)
+	// zeroForOne = false (token1 → token0)
+	return u.performSwap(amount, symbol, false)
+}
+
+func (u *UniswapV3) Sell(amount float64, symbol string) (string, error) {
+	// Sell means: swap token0 (e.g., WBNB) for token1 (e.g., USDC)
+	// zeroForOne = true (token0 → token1)
+	return u.performSwap(amount, symbol, true)
+}
+
+// NOTE: The old createTransaction function has been removed and replaced with
+// the new performSwap implementation above. The new implementation:
+// 1. Uses the proper Uniswap V3 pool.Swap() method instead of basic transfers
+// 2. Handles token decimals correctly based on pool configuration
+// 3. Properly sets up transaction parameters (gas, nonce, etc.)
+// 4. Provides better error handling and logging
+// 5. Supports both buy and sell operations with proper swap directions
 
 func (u *UniswapV3) GetPoolFee() float64 {
 	return u.platformFee
@@ -199,3 +306,9 @@ func CalculatePrice(sqrtPriceX96 *big.Int, config *PoolConfig, desiredPair strin
 
 	return adjustedPrice // This gives USDT per WETH
 }
+
+var GasFeeCap = big.NewInt(3_000_000_000) //
+var GasTipCap = big.NewInt(1_000_000_000)
+
+var TestGasFeeCap = big.NewInt(10_000_000_000) //
+var TestGasTipCap = big.NewInt(1_000_000_000)

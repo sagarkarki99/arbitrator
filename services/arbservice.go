@@ -53,7 +53,7 @@ func (a *ArbServiceImpl) LookOpportunity(asset1, asset2 <-chan *dex.Price) {
 			slog.Info("Received price from dex1", "price", asset1Price.Price)
 			lastPrice1 = asset1Price.Price
 			if lastPrice2 != 0 && a.IsSpreadProfitable(lastPrice1, lastPrice2) && a.IsProfit(lastPrice1, lastPrice2) {
-				a.performArbitrageTransaction(lastPrice1, lastPrice2)
+				a.performArbitrageTransaction(lastPrice1, lastPrice2, asset1Price.Symbol)
 				// Perform arbitrage transaction
 
 			}
@@ -70,15 +70,15 @@ func (a *ArbServiceImpl) LookOpportunity(asset1, asset2 <-chan *dex.Price) {
 	}
 }
 
-func (a *ArbServiceImpl) performArbitrageTransaction(lastPrice1, lastPrice2 float64) {
+func (a *ArbServiceImpl) performArbitrageTransaction(lastPrice1, lastPrice2 float64, symbol string) {
 	if math.Min(lastPrice1, lastPrice2) == lastPrice1 {
 		// buy in dex1 and sell in dex2
-		a.dex1.Buy(amountSize)
-		a.dex2.Sell(amountSize)
+		a.dex1.Buy(amountSize, symbol)
+		a.dex2.Sell(amountSize, symbol)
 
 	} else {
-		a.dex2.Buy(amountSize)
-		a.dex1.Sell(amountSize)
+		a.dex2.Buy(amountSize, symbol)
+		a.dex1.Sell(amountSize, symbol)
 		// buy in dex2 and sell in dex1
 	}
 }
