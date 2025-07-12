@@ -37,13 +37,13 @@ import (
 	"log/slog"
 	"math"
 	"math/big"
-	"math/rand/v2"
 	"time"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/sagarkarki99/arbitrator/constants"
 	"github.com/sagarkarki99/arbitrator/contracts"
 	"github.com/sagarkarki99/arbitrator/keychain"
 )
@@ -113,33 +113,33 @@ func (u *UniswapV3) GetPrice(symbol string) (<-chan *Price, error) {
 			close(priceChan)
 			delete(u.sub, symbol)
 		}()
-		for i := 0; i < 3; i++ {
-			price := (1000 + rand.Float64()*100)
-			time.Sleep(time.Second * 1)
-			priceChan <- &Price{
-				Pool:            "Uniswap",
-				Symbol:          symbol,
-				Price:           price,
-				Liquidity:       big.NewInt(int64(price * 1e18)), // Assuming price is in USD, convert to wei
-				LiquidityStatus: "high",
-			}
-		}
-		// for {
-		// 	select {
-		// 	case err := <-sub.Err():
-		// 		slog.Error("Subscription error", "error", err)
-		// 		return
-		// 	case swapEvent := <-swapChan:
-
-		// 		price := CalculatePrice(swapEvent.SqrtPriceX96, config, symbol)
-		// 		priceChan <- &Price{
-		// 			Pool:      "Uniswap",
-		// 			Symbol:    symbol,
-		// 			Price:     price,
-		// 			Liquidity: swapEvent.Liquidity,
-		// 		}
+		// for i := 0; i < 3; i++ {
+		// 	price := (1000 + rand.Float64()*100)
+		// 	time.Sleep(time.Second * 1)
+		// 	priceChan <- &Price{
+		// 		Pool:            "Uniswap",
+		// 		Symbol:          symbol,
+		// 		Price:           price,
+		// 		Liquidity:       big.NewInt(int64(price * 1e18)), // Assuming price is in USD, convert to wei
+		// 		LiquidityStatus: "high",
 		// 	}
 		// }
+		for {
+			select {
+			case err := <-sub.Err():
+				slog.Error("Subscription error", "error", err)
+				return
+			case swapEvent := <-swapChan:
+
+				price := CalculatePrice(swapEvent.SqrtPriceX96, config, symbol)
+				priceChan <- &Price{
+					Pool:      "Uniswap",
+					Symbol:    symbol,
+					Price:     price,
+					Liquidity: swapEvent.Liquidity,
+				}
+			}
+		}
 	}()
 	return priceChan, err
 }
@@ -152,27 +152,12 @@ func (u *UniswapV3) performSwap(amount float64, symbol string, zeroForOne bool) 
 		return "", fmt.Errorf("failed to get pool config: %w", err)
 	}
 
-	// Step 3: Initialize pool contract
-	poolAddress := common.HexToAddress(config.Address)
-	pool, err := contracts.NewUniswapV3Pool(poolAddress, u.cl)
-	if err != nil {
-		slog.Error("Could not create uniswapv3pool", "error", err)
-		return "", fmt.Errorf("failed to create pool contract: %w", err)
-	}
-
-	// Step 4: Set up transaction parameters
 	myAddress := common.HexToAddress(keychain.Accounts[0])
 
 	// Get nonce for transaction
 	nonce, err := u.cl.PendingNonceAt(context.Background(), myAddress)
 	if err != nil {
 		return "", fmt.Errorf("failed to get nonce: %w", err)
-	}
-
-	// Get gas price
-	gasPrice, err := u.cl.SuggestGasPrice(context.Background())
-	if err != nil {
-		return "", fmt.Errorf("failed to get gas price: %w", err)
 	}
 
 	// Step 5: Calculate amount with proper decimals
@@ -198,33 +183,40 @@ func (u *UniswapV3) performSwap(amount float64, symbol string, zeroForOne bool) 
 	amountInDecimals := new(big.Int)
 	amountWithDecimals.Int(amountInDecimals) // Convert to big.Int
 
-	// Step 6: Prepare transaction options
 	auth := &bind.TransactOpts{
 		From:      myAddress,
 		Nonce:     big.NewInt(int64(nonce)),
-		Value:     big.NewInt(0), // No ETH value for token swaps
-		GasPrice:  gasPrice,
-		GasFeeCap: GasFeeCap,
-		GasTipCap: GasTipCap,
+		Value:     big.NewInt(0), // No ETH sent with swap
+		GasFeeCap: constants.GasFeeCap,
+		GasTipCap: constants.GasTipCap,
 		Signer: func(address common.Address, tx *types.Transaction) (*types.Transaction, error) {
 			return u.kc.Sign(tx)
 		},
 	}
 
+	slog.Info("Swap transaction Info",
+		"symbol", symbol,
+		"amount", amount,
+		"amount_in_decimals", amountInDecimals.String(),
+		"from_token", fromToken,
+		"to_token", toToken,
+		"zero_for_one", zeroForOne)
+
 	tm := time.Now()
 	// Step 7: Execute the swap
-	tx, err := pool.Swap(
-		auth,
-		myAddress,        // recipient
-		zeroForOne,       // swap direction
-		amountInDecimals, // amountSpecified (exact input)
-		big.NewInt(0),    // sqrtPriceLimitX96 (no limit)
-		[]byte{},         // data (empty)
-	)
+	swapRouter, _ := contracts.NewSwapRouter(common.HexToAddress("0x3bFA4769FB09eefC5a80d6E87c3B9C650f7Ae48E"), u.cl)
+	params := contracts.IV3SwapRouterExactInputSingleParams{
+		TokenIn:           common.HexToAddress(config.Token1Contract),
+		TokenOut:          common.HexToAddress(config.Token0Contract),
+		Recipient:         myAddress,
+		AmountIn:          amountInDecimals, // Amount to swap (exact input)
+		Fee:               big.NewInt(3000),
+		SqrtPriceLimitX96: big.NewInt(0),
+		AmountOutMinimum:  big.NewInt(0), // No minimum output amount
+	}
+	tx, err := swapRouter.ExactInputSingle(auth, params)
 
 	elasped := time.Since(tm)
-	slog.Info("Swap execution time", "duration", elasped)
-
 	if err != nil {
 		slog.Error("Failed to execute swap", "error", err)
 		return "", fmt.Errorf("failed to execute swap: %w", err)
@@ -236,8 +228,9 @@ func (u *UniswapV3) performSwap(amount float64, symbol string, zeroForOne bool) 
 		"amount", amount,
 		"from_token", fromToken,
 		"to_token", toToken,
-		"zero_for_one", zeroForOne)
-
+		"zero_for_one", zeroForOne,
+		"executed at", elasped.String(),
+	)
 	return tx.Hash().Hex(), nil
 }
 
@@ -300,9 +293,3 @@ func CalculatePrice(sqrtPriceX96 *big.Int, config *PoolConfig, desiredPair strin
 
 	return adjustedPrice // This gives USDT per WETH
 }
-
-var GasFeeCap = big.NewInt(3_000_000_000) //
-var GasTipCap = big.NewInt(1_000_000_000)
-
-var TestGasFeeCap = big.NewInt(10_000_000_000) //
-var TestGasTipCap = big.NewInt(1_000_000_000)

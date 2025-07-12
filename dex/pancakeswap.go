@@ -10,6 +10,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/sagarkarki99/arbitrator/constants"
 	"github.com/sagarkarki99/arbitrator/contracts"
 
 	"github.com/sagarkarki99/arbitrator/keychain"
@@ -160,8 +161,8 @@ func (p *PancakeswapV2Pool) performSwap(amount float64, symbol string, zeroForOn
 		From:      myAddress,
 		Nonce:     big.NewInt(int64(15)),
 		Value:     big.NewInt(0), // No ETH value for token swaps
-		GasFeeCap: TestGasFeeCap,
-		GasTipCap: TestGasTipCap,
+		GasFeeCap: constants.GasFeeCap,
+		GasTipCap: constants.GasTipCap,
 		Signer: func(address common.Address, tx *types.Transaction) (*types.Transaction, error) {
 			return p.kc.Sign(tx)
 		},
