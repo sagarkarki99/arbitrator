@@ -12,7 +12,6 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/sagarkarki99/arbitrator/constants"
 	"github.com/sagarkarki99/arbitrator/contracts"
-
 	"github.com/sagarkarki99/arbitrator/keychain"
 )
 
@@ -49,9 +48,6 @@ func (p *PancakeswapV2Pool) GetPrice(symbol string) (<-chan *Price, error) {
 	if err != nil {
 		return nil, err
 	}
-
-	s, _ := pool.ProtocolFees(nil)
-	slog.Info("Protocol fee", s.Token0, s.Token1)
 
 	swapChan := make(chan *contracts.PancakeswapV3PoolSwap)
 	priceChan := make(chan *Price)
@@ -183,15 +179,13 @@ func (p *PancakeswapV2Pool) performSwap(amount float64, symbol string, zeroForOn
 	slog.Info("Swap execution time", "duration", elasped)
 
 	if err != nil {
-		if err != nil {
-			slog.Error("Swap failed with details",
-				"error", err,
-				"symbol", symbol,
-				"amount", amount,
-				"nonce", 18,
-				"pool_address", poolAddress.Hex())
-			return "", fmt.Errorf("failed to execute swap: %w", err)
-		}
+		slog.Error("Swap failed with details",
+			"error", err,
+			"symbol", symbol,
+			"amount", amount,
+			"nonce", 18,
+			"pool_address", poolAddress.Hex())
+		return "", fmt.Errorf("failed to execute swap: %w", err)
 	}
 
 	slog.Info("Swap transaction submitted",

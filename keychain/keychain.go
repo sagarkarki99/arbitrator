@@ -92,17 +92,17 @@ func GetNativeBalance(address string, cl *ethclient.Client) (*big.Int, error) {
 	return ethBalance, nil
 }
 
-func HasApproval(address string, cl *ethclient.Client) bool {
-	myAddress := common.HexToAddress(Accounts[0])
-	poolAddress := common.HexToAddress(address)
-	erc20, _ := contracts.NewERC20(poolAddress, cl)
-	allowance, err := erc20.Allowance(&bind.CallOpts{}, myAddress, poolAddress)
+func HasApproval(spender string, contractAddress string, cl *ethclient.Client) bool {
+	sp := common.HexToAddress(spender)
+	contractAddr := common.HexToAddress(contractAddress)
+	erc20, _ := contracts.NewERC20(contractAddr, cl)
+	allowance, err := erc20.Allowance(&bind.CallOpts{}, sp, contractAddr)
 	if err != nil {
 		slog.Error("Failed to get allowance", "error", err)
 		return false
 	}
 
-	fmt.Printf("Pool allowance: %s USDC\n", allowance.String())
+	fmt.Printf("Pool allowance: %s \n", allowance.String())
 
 	if allowance.Cmp(big.NewInt(0)) == 0 {
 		slog.Error("Pool has no allowance to spend your USDC! Run approval first.")
