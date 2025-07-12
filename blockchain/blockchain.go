@@ -3,6 +3,7 @@ package blockchain
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"sync"
 
@@ -76,7 +77,7 @@ func getChains() map[string]*Network {
 				ChainName: "ethereum",
 				ChainID:   1,
 			},
-			"EthTestnet": {
+			"EthSepolia": {
 				Network:   Testnet,
 				WsUrl:     "wss://sepolia.infura.io/ws/v3/" + infuraAPIKey,
 				HttpUrl:   "https://sepolia.infura.io/v3/" + infuraAPIKey,
@@ -107,6 +108,16 @@ func Connect(network *Network) *ethclient.Client {
 	if err != nil {
 		panic(err)
 	}
+
+	slog.Info("Connected to chain",
+		slog.Group("chain",
+			"network", ActiveChain.Network,
+			"wsUrl", ActiveChain.WsUrl,
+			"httpUrl", ActiveChain.HttpUrl,
+			"chainName", ActiveChain.ChainName,
+			"chainID", ActiveChain.ChainID,
+		),
+	)
 	return cl
 }
 

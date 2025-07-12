@@ -18,6 +18,8 @@ type Price struct {
 type PoolConfig struct {
 	Token0         string
 	Token1         string
+	Token0Contract string
+	Token1Contract string
 	Token0Decimals int
 	Token1Decimals int
 	Address        string
@@ -81,6 +83,14 @@ var ChainConfigs = map[string]*NetworkConfig{
 					Token0Decimals: 18,
 					Token1Decimals: 6,
 					Address:        "0x3289680dD4d6C10bb19b899729cda5eEF58AEfF1",
+				},
+				"USDC/ETH": {
+					Token0:         "USDC",
+					Token1:         "ETH",
+					Token0Contract: "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238",
+					Token0Decimals: 6,
+					Token1Decimals: 18,
+					Address:        "0x6Ce0896eAE6D4BD668fDe41BB784548fb8F59b50",
 				},
 			},
 		},
