@@ -77,20 +77,15 @@ var ChainConfigs = map[string]*NetworkConfig{
 		},
 		Testnet: map[DexApp]map[string]*PoolConfig{
 			Uniswap: {
-				"WETH/USDC": {
-					Token0:         "WETH",
-					Token1:         "USDC",
-					Token0Decimals: 18,
-					Token1Decimals: 6,
-					Address:        "0x3289680dD4d6C10bb19b899729cda5eEF58AEfF1",
-				},
-				"USDC/ETH": {
+
+				"USDC/WETH": {
 					Token0:         "USDC",
-					Token1:         "ETH",
+					Token1:         "WETH",
 					Token0Contract: "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238",
+					Token1Contract: "0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14",
 					Token0Decimals: 6,
 					Token1Decimals: 18,
-					Address:        "0x6Ce0896eAE6D4BD668fDe41BB784548fb8F59b50",
+					Address:        "0x3289680dD4d6C10bb19b899729cda5eEF58AEfF1",
 				},
 			},
 		},
