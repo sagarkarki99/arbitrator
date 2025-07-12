@@ -4,22 +4,23 @@ import (
 	"fmt"
 	"log/slog"
 	"math/big"
-	"math/rand/v2"
 	"time"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind/v2"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/sagarkarki99/arbitrator/blockchain"
 	"github.com/sagarkarki99/arbitrator/contracts"
 	"github.com/sagarkarki99/arbitrator/keychain"
 )
 
-func NewPancakeswapV2Pool(client *ethclient.Client) Dex {
+func NewPancakeswapV2Pool(client *ethclient.Client, kc keychain.Keychain) Dex {
 	pool := &PancakeswapV2Pool{
 		cl:          client,
 		subs:        make(map[string]chan *Price),
 		platformFee: 0.002, // 0.2% platform fee
+		kc:          kc,
 	}
 
 	return pool
@@ -29,6 +30,7 @@ type PancakeswapV2Pool struct {
 	cl          *ethclient.Client
 	subs        map[string]chan *Price
 	platformFee float64
+	kc          keychain.Keychain
 }
 
 func (p *PancakeswapV2Pool) GetPrice(symbol string) (<-chan *Price, error) {
@@ -73,53 +75,151 @@ func (p *PancakeswapV2Pool) GetPrice(symbol string) (<-chan *Price, error) {
 			delete(p.subs, symbol)
 			slog.Info("Unsubscribing from Pancakeswap V2 pool", "symbol", symbol, "address", config.Address)
 		}()
-		for i := 0; i < 3; i++ {
-			price := (1000 + rand.Float64()*5) // Random price between 1000-1100
-			time.Sleep(time.Second * 2)
-			priceChan <- &Price{
-				Pool:            "Uniswap",
-				Symbol:          symbol,
-				Price:           price,
-				Liquidity:       big.NewInt(1000000), // Example liquidity value
-				LiquidityStatus: "high",
-			}
-		}
-		close(priceChan)
-		// for {
-		// 	select {
-		// 	case err := <-sub.Err():
-		// 		slog.Error("Error in Pancakeswap V2 pool subscription", "error", err)
-		// 		return
-		// 	case swapEvent := <-swapChan:
-		// 		// price := CalculatePrice(swapEvent.SqrtPriceX96, config, symbol)
-		// 		// status := "high"
-		// 		// if swapEvent.Liquidity.Cmp(big.NewInt(1e10)) < 0 {
-		// 		// 	status = "low"
-		// 		// }
-		// 		priceChan <- &Price{
-		// 			Pool:            "Uniswap",
-		// 			Symbol:          symbol,
-		// 			Price:           price,
-		// 			Liquidity:       swapEvent.Liquidity,
-		// 			LiquidityStatus: status,
-		// 		}
+		// for i := 0; i < 3; i++ {
+		// 	price := (1000 + rand.Float64()*5) // Random price between 1000-1100
+		// 	time.Sleep(time.Second * 2)
+		// 	priceChan <- &Price{
+		// 		Pool:            "Pancakeswap",
+		// 		Symbol:          symbol,
+		// 		Price:           price,
+		// 		Liquidity:       big.NewInt(1000000), // Example liquidity value
+		// 		LiquidityStatus: "high",
 		// 	}
 		// }
+		// close(priceChan)
+		for {
+			select {
+			case err := <-sub.Err():
+				slog.Error("Error in Pancakeswap V2 pool subscription", "error", err)
+				return
+			case swapEvent := <-swapChan:
+				price := CalculatePrice(swapEvent.SqrtPriceX96, config, symbol)
+				status := "high"
+				if swapEvent.Liquidity.Cmp(big.NewInt(1e10)) < 0 {
+					status = "low"
+				}
+				priceChan <- &Price{
+					Pool:            "Pancakeswap",
+					Symbol:          symbol,
+					Price:           price,
+					Liquidity:       swapEvent.Liquidity,
+					LiquidityStatus: status,
+				}
+			}
+		}
 	}()
 	return priceChan, nil
 }
 
-func (p *PancakeswapV2Pool) Buy(amount float64) (string, error) {
-	return p.createTransaction(amount, keychain.Accounts[0])
+func (p *PancakeswapV2Pool) Buy(amount float64, symbol string) (string, error) {
+	return p.performSwap(amount, symbol, false)
 }
 
-func (p *PancakeswapV2Pool) Sell(amount float64) (string, error) {
-	return p.createTransaction(amount, keychain.Accounts[0])
+func (p *PancakeswapV2Pool) Sell(amount float64, symbol string) (string, error) {
+	return p.performSwap(amount, symbol, true)
 }
 
-func (p *PancakeswapV2Pool) createTransaction(amount float64, from string) (string, error) {
-	// Implement transaction creation logic here
-	return "", nil
+// Helper function to perform swaps with common logic
+func (p *PancakeswapV2Pool) performSwap(amount float64, symbol string, zeroForOne bool) (string, error) {
+	// Step 1: Get pool configuration
+	config := BnbPancakeTestnetSymbolToPool[symbol]
+	if config == nil {
+		return "", fmt.Errorf("pool configuration not found for symbol: %s", symbol)
+	}
+
+	// Step 2: Resolve pool address based on network
+	var addr string
+	if blockchain.ActiveChain.Network == "mainnet" {
+		addr = config.Address
+	} else {
+		addr = config.TestAddress
+	}
+
+	if addr == "" {
+		return "", fmt.Errorf("pool address not configured for symbol: %s", symbol)
+	}
+
+	// Step 3: Initialize pool contract
+	poolAddress := common.HexToAddress(addr)
+	pool, err := contracts.NewPancakeswapV3Pool(poolAddress, p.cl)
+	if err != nil {
+		slog.Error("Could not create pancakeswap pool", "error", err)
+		return "", fmt.Errorf("failed to create pool contract: %w", err)
+	}
+
+	// Step 4: Set up transaction parameters
+	myAddress := common.HexToAddress(keychain.Accounts[0])
+
+	// Step 5: Calculate amount with proper decimals
+	var decimals int
+	var fromToken, toToken string
+
+	if zeroForOne {
+		// Selling token0 for token1
+		decimals = config.token0Decimals
+		fromToken = config.token0
+		toToken = config.token1
+	} else {
+		// Buying token0 with token1
+		decimals = config.token1Decimals
+		fromToken = config.token1
+		toToken = config.token0
+	}
+
+	decimalMultiplier := new(big.Float).SetInt(new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(decimals)), nil))
+	amountFloat := new(big.Float).SetFloat64(amount)
+	amountWithDecimals := new(big.Float).Mul(amountFloat, decimalMultiplier)
+
+	amountInDecimals := new(big.Int)
+	amountWithDecimals.Int(amountInDecimals) // Convert to big.Int
+
+	// Step 6: Prepare transaction options
+	auth := &bind.TransactOpts{
+		From:      myAddress,
+		Nonce:     big.NewInt(int64(15)),
+		Value:     big.NewInt(0), // No ETH value for token swaps
+		GasFeeCap: TestGasFeeCap,
+		GasTipCap: TestGasTipCap,
+		Signer: func(address common.Address, tx *types.Transaction) (*types.Transaction, error) {
+			return p.kc.Sign(tx)
+		},
+	}
+
+	tm := time.Now()
+	// Step 7: Execute the swap
+	tx, err := pool.Swap(
+		auth,
+		myAddress,        // recipient
+		zeroForOne,       // swap direction
+		amountInDecimals, // amountSpecified (exact input)
+		big.NewInt(0),    // sqrtPriceLimitX96 (no limit)
+		[]byte{},         // data (empty)
+	)
+
+	elasped := time.Since(tm)
+	slog.Info("Swap execution time", "duration", elasped)
+
+	if err != nil {
+		if err != nil {
+			slog.Error("Swap failed with details",
+				"error", err,
+				"symbol", symbol,
+				"amount", amount,
+				"nonce", 18,
+				"pool_address", poolAddress.Hex())
+			return "", fmt.Errorf("failed to execute swap: %w", err)
+		}
+	}
+
+	slog.Info("Swap transaction submitted",
+		"hash", tx.Hash().Hex(),
+		"symbol", symbol,
+		"amount", amount,
+		"from_token", fromToken,
+		"to_token", toToken,
+		"zero_for_one", zeroForOne)
+
+	return tx.Hash().Hex(), nil
 }
 
 func (p *PancakeswapV2Pool) GetPoolFee() float64 {
