@@ -163,17 +163,21 @@ func (u *UniswapV3) performSwap(amount float64, symbol string, zeroForOne bool) 
 	// Step 5: Calculate amount with proper decimals
 	var decimals int
 	var fromToken, toToken string
-
+	var tokenIn, tokenOut common.Address
 	if zeroForOne {
 		// Selling token0 for token1
 		decimals = config.Token0Decimals
 		fromToken = config.Token0
 		toToken = config.Token1
+		tokenIn = common.HexToAddress(config.Token0Contract)
+		tokenOut = common.HexToAddress(config.Token1Contract)
 	} else {
 		// Buying token0 with token1
 		decimals = config.Token1Decimals
 		fromToken = config.Token1
 		toToken = config.Token0
+		tokenIn = common.HexToAddress(config.Token1Contract)
+		tokenOut = common.HexToAddress(config.Token0Contract)
 	}
 
 	decimalMultiplier := new(big.Float).SetInt(new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(decimals)), nil))
@@ -206,8 +210,8 @@ func (u *UniswapV3) performSwap(amount float64, symbol string, zeroForOne bool) 
 	// Step 7: Execute the swap
 	swapRouter, _ := contracts.NewSwapRouter(common.HexToAddress("0x3bFA4769FB09eefC5a80d6E87c3B9C650f7Ae48E"), u.cl)
 	params := contracts.IV3SwapRouterExactInputSingleParams{
-		TokenIn:           common.HexToAddress(config.Token1Contract),
-		TokenOut:          common.HexToAddress(config.Token0Contract),
+		TokenIn:           tokenIn,
+		TokenOut:          tokenOut,
 		Recipient:         myAddress,
 		AmountIn:          amountInDecimals, // Amount to swap (exact input)
 		Fee:               big.NewInt(3000),
