@@ -10,8 +10,8 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
-	"github.com/sagarkarki99/arbitrator/blockchain"
 	"github.com/sagarkarki99/arbitrator/contracts"
+
 	"github.com/sagarkarki99/arbitrator/keychain"
 )
 
@@ -38,18 +38,12 @@ func (p *PancakeswapV2Pool) GetPrice(symbol string) (<-chan *Price, error) {
 		return sub, nil
 	}
 
-	config, exists := BnbPancakeTestnetSymbolToPool[symbol]
-	if !exists {
+	config, err := GetActiveMarkets(symbol, Pancakeswap)
+	if err != nil {
 		return nil, fmt.Errorf("no pool found for symbol %s", symbol)
 	}
 
-	var addr string
-	if blockchain.ActiveChain.Network == "mainnet" {
-		addr = config.Address
-	} else {
-		addr = config.TestAddress
-	}
-	poolAddress := common.HexToAddress(addr)
+	poolAddress := common.HexToAddress(config.Address)
 	pool, err := contracts.NewPancakeswapV3Pool(poolAddress, p.cl)
 	if err != nil {
 		return nil, err
@@ -122,25 +116,13 @@ func (p *PancakeswapV2Pool) Sell(amount float64, symbol string) (string, error) 
 // Helper function to perform swaps with common logic
 func (p *PancakeswapV2Pool) performSwap(amount float64, symbol string, zeroForOne bool) (string, error) {
 	// Step 1: Get pool configuration
-	config := BnbPancakeTestnetSymbolToPool[symbol]
-	if config == nil {
+	config, err := GetActiveMarkets(symbol, Pancakeswap)
+	if err != nil {
 		return "", fmt.Errorf("pool configuration not found for symbol: %s", symbol)
 	}
 
-	// Step 2: Resolve pool address based on network
-	var addr string
-	if blockchain.ActiveChain.Network == "mainnet" {
-		addr = config.Address
-	} else {
-		addr = config.TestAddress
-	}
-
-	if addr == "" {
-		return "", fmt.Errorf("pool address not configured for symbol: %s", symbol)
-	}
-
 	// Step 3: Initialize pool contract
-	poolAddress := common.HexToAddress(addr)
+	poolAddress := common.HexToAddress(config.Address)
 	pool, err := contracts.NewPancakeswapV3Pool(poolAddress, p.cl)
 	if err != nil {
 		slog.Error("Could not create pancakeswap pool", "error", err)
@@ -156,14 +138,14 @@ func (p *PancakeswapV2Pool) performSwap(amount float64, symbol string, zeroForOn
 
 	if zeroForOne {
 		// Selling token0 for token1
-		decimals = config.token0Decimals
-		fromToken = config.token0
-		toToken = config.token1
+		decimals = config.Token0Decimals
+		fromToken = config.Token0
+		toToken = config.Token1
 	} else {
 		// Buying token0 with token1
-		decimals = config.token1Decimals
-		fromToken = config.token1
-		toToken = config.token0
+		decimals = config.Token1Decimals
+		fromToken = config.Token1
+		toToken = config.Token0
 	}
 
 	decimalMultiplier := new(big.Float).SetInt(new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(decimals)), nil))

@@ -11,6 +11,11 @@ import (
 )
 
 var (
+	Mainnet = "mainnet"
+	Testnet = "testnet"
+)
+
+var (
 	chains     map[string]*Network
 	chainsOnce sync.Once
 )
@@ -37,40 +42,46 @@ func getChains() map[string]*Network {
 
 		chains = map[string]*Network{
 			"BscMainnet": {
-				Network:   "mainnet",
+				Network:   Mainnet,
 				WsUrl:     "wss://bsc-rpc.publicnode.com",
 				HttpUrl:   "https://bsc-rpc.publicnode.com",
 				ChainName: "BSC",
 				ChainID:   56,
 			},
 			"BscTestnet": {
-				Network:   "testnet",
+				Network:   Testnet,
 				WsUrl:     "wss://bsc-testnet-rpc.publicnode.com",
 				HttpUrl:   "https://bsc-testnet.bnbchain.org",
-				ChainName: "BSC testnet",
+				ChainName: "BSC",
 				ChainID:   97,
 			},
 			"BscTestnetInfura": {
-				Network:   "testnet",
+				Network:   Testnet,
 				WsUrl:     "wss://bsc-testnet.infura.io/ws/v3/" + infuraAPIKey,
 				HttpUrl:   "https://bsc-testnet.infura.io/v3/" + infuraAPIKey,
-				ChainName: "BSC Testnet Infura",
+				ChainName: "BSC",
 				ChainID:   97,
 			},
 			"BscMainnetInfura": {
-				Network:   "mainnet",
+				Network:   Mainnet,
 				WsUrl:     "wss://bsc-mainnet.infura.io/ws/v3/" + infuraAPIKey,
 				HttpUrl:   "https://bsc-rpc.publicnode.com",
 				ChainName: "BSC",
 				ChainID:   56,
 			},
-
 			"EthMainnet": {
-				Network:   "mainnet",
+				Network:   Mainnet,
 				WsUrl:     "wss://mainnet.infura.io/ws/v3/" + infuraAPIKey,
 				HttpUrl:   "https://ethereum.publicnode.com",
-				ChainName: "Ethereum",
+				ChainName: "ethereum",
 				ChainID:   1,
+			},
+			"EthTestnet": {
+				Network:   Testnet,
+				WsUrl:     "wss://sepolia.infura.io/ws/v3/" + infuraAPIKey,
+				HttpUrl:   "https://sepolia.infura.io/v3/" + infuraAPIKey,
+				ChainName: "ethereum",
+				ChainID:   11155111,
 			},
 		}
 	})

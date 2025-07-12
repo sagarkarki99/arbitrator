@@ -44,7 +44,6 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
-	"github.com/sagarkarki99/arbitrator/blockchain"
 	"github.com/sagarkarki99/arbitrator/contracts"
 	"github.com/sagarkarki99/arbitrator/keychain"
 )
@@ -55,6 +54,13 @@ type Dex interface {
 	Buy(amount float64, symbol string) (string, error)
 	Sell(amount float64, symbol string) (string, error)
 }
+
+type DexApp string
+
+var (
+	Uniswap     DexApp = "Uniswap"
+	Pancakeswap DexApp = "Pancakeswap"
+)
 
 func NewUniswapV3Pool(cl *ethclient.Client, kc keychain.Keychain) Dex {
 	return &UniswapV3{
@@ -73,20 +79,20 @@ type UniswapV3 struct {
 }
 
 func (u *UniswapV3) GetPrice(symbol string) (<-chan *Price, error) {
-	config := BnbPancakeTestnetSymbolToPool[symbol]
 	if u.sub[symbol] != nil {
 		return u.sub[symbol], nil
 	}
-	var addr string
-	if blockchain.ActiveChain.Network == "mainnet" {
-		addr = config.Address
-	} else {
-		addr = config.TestAddress
+
+	config, err := GetActiveMarkets(symbol, Uniswap)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get pool config: %w", err)
 	}
-	poolAddress := common.HexToAddress(addr)
+
+	poolAddress := common.HexToAddress(config.Address)
 	pool, err := contracts.NewUniswapV3Pool(poolAddress, u.cl)
 	if err != nil {
 		slog.Error("Could not create uniswapv3pool")
+		return nil, fmt.Errorf("failed to create pool contract: %w", err)
 	}
 
 	swapChan := make(chan *contracts.UniswapV3PoolSwap)
@@ -140,26 +146,14 @@ func (u *UniswapV3) GetPrice(symbol string) (<-chan *Price, error) {
 
 // Helper function to perform swaps with common logic
 func (u *UniswapV3) performSwap(amount float64, symbol string, zeroForOne bool) (string, error) {
-	// Step 1: Get pool configuration
-	config := BnbPancakeTestnetSymbolToPool[symbol]
-	if config == nil {
-		return "", fmt.Errorf("pool configuration not found for symbol: %s", symbol)
-	}
-
-	// Step 2: Resolve pool address based on network
-	var addr string
-	if blockchain.ActiveChain.Network == "mainnet" {
-		addr = config.Address
-	} else {
-		addr = config.TestAddress
-	}
-
-	if addr == "" {
-		return "", fmt.Errorf("pool address not configured for symbol: %s", symbol)
+	// Step 1: Get pool configuration using the new system
+	config, err := GetActiveMarkets(symbol, Uniswap)
+	if err != nil {
+		return "", fmt.Errorf("failed to get pool config: %w", err)
 	}
 
 	// Step 3: Initialize pool contract
-	poolAddress := common.HexToAddress(addr)
+	poolAddress := common.HexToAddress(config.Address)
 	pool, err := contracts.NewUniswapV3Pool(poolAddress, u.cl)
 	if err != nil {
 		slog.Error("Could not create uniswapv3pool", "error", err)
@@ -187,14 +181,14 @@ func (u *UniswapV3) performSwap(amount float64, symbol string, zeroForOne bool) 
 
 	if zeroForOne {
 		// Selling token0 for token1
-		decimals = config.token0Decimals
-		fromToken = config.token0
-		toToken = config.token1
+		decimals = config.Token0Decimals
+		fromToken = config.Token0
+		toToken = config.Token1
 	} else {
 		// Buying token0 with token1
-		decimals = config.token1Decimals
-		fromToken = config.token1
-		toToken = config.token0
+		decimals = config.Token1Decimals
+		fromToken = config.Token1
+		toToken = config.Token0
 	}
 
 	decimalMultiplier := new(big.Float).SetInt(new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(decimals)), nil))
@@ -287,15 +281,15 @@ func CalculatePrice(sqrtPriceX96 *big.Int, config *PoolConfig, desiredPair strin
 	// The raw price returned by Uniswap is based on integer amounts,
 	// so we need to multiply by 10^(token0Decimals−token1Decimals)
 	// to account for the decimal places of each token.
-	decimalAdjustment := math.Pow(10, float64(config.token0Decimals-config.token1Decimals))
+	decimalAdjustment := math.Pow(10, float64(config.Token0Decimals-config.Token1Decimals))
 	adjustedPrice := priceFloat64 * decimalAdjustment
 
 	// sqrtPriceX96 gives us token1/token0 ratio
 	// For your pools: WETH/USDT ratio (since WETH=token1, USDT=token0)
 
 	slog.Debug("Price calculation",
-		"token0", config.token0,
-		"token1", config.token1,
+		"token0", config.Token0,
+		"token1", config.Token1,
 		"rawPrice", priceFloat64,
 		"adjustedPrice", adjustedPrice,
 		"desiredPair", desiredPair)

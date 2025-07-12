@@ -27,7 +27,7 @@ func main() {
 	}()
 	kc := keychain.NewKeychainImpl()
 	uniswap := dex.NewUniswapV3Pool(cl, kc)
-	pancake := dex.NewPancakeswapV2Pool(cl)
+	pancake := dex.NewPancakeswapV2Pool(cl, kc)
 
 	// uniswap.CreateTransaction(0.001, "BNB", "0x267f5BFc9486b446046e97F9D3864793dA8eFb33")
 	// time.Sleep(5 * time.Second)
