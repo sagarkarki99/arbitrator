@@ -10,6 +10,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/sagarkarki99/arbitrator/constants"
 	"github.com/sagarkarki99/arbitrator/contracts"
 )
 
@@ -19,7 +20,7 @@ var Accounts []string = []string{
 }
 
 // to is address that is spender, tokenContract is the ERC20 token contract address
-func SendApproval(cl *ethclient.Client, to string, tokenContract string, kc Keychain) bool {
+func SendApproval(cl *ethclient.Client, to string, tokenContract string, kc Keychain, amount *big.Int) bool {
 
 	tokenAddress := common.HexToAddress(tokenContract)
 
@@ -74,9 +75,9 @@ func SendApproval(cl *ethclient.Client, to string, tokenContract string, kc Keyc
 	auth := &bind.TransactOpts{
 		Nonce:     big.NewInt(int64(nonce)),
 		From:      myAddress,
-		GasLimit:  100000,                      // Set gas limit for approval
-		GasFeeCap: big.NewInt(100_000_000_000), // 100 Gwei
-		GasTipCap: big.NewInt(4_000_000_000),   // 4 Gwei
+		GasLimit:  100000, // Set gas limit for approval
+		GasFeeCap: constants.GasFeeCap,
+		GasTipCap: constants.GasTipCap,
 		Signer: func(address common.Address, tx *types.Transaction) (*types.Transaction, error) {
 			return kc.Sign(tx)
 		},
@@ -85,9 +86,9 @@ func SendApproval(cl *ethclient.Client, to string, tokenContract string, kc Keyc
 	slog.Info("Approving token transfer",
 		"token", tokenContract,
 		"spender", to,
-		"amount", "1e18")
+		"amount", amount.String())
 
-	trx, err := erc20.Approve(auth, poolAddress, big.NewInt(1e18))
+	trx, err := erc20.Approve(auth, poolAddress, amount)
 	if err != nil {
 		slog.Error("Failed to approve token transfer", "error", err)
 		return true
