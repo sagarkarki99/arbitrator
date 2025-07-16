@@ -4,30 +4,49 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
+	"sync"
 
 	"github.com/sagarkarki99/arbitrator/dex"
 )
 
+var Slippage = 0.001 // 1% slippage tolerance
 var TotalGasCost = 0.0016
-var AmountSize = 0.001
-var ProfitThreshold = 0.00001 // WETH
 var ActiveSymbol = "USDC/WETH"
 
 type ArbService interface {
 	// Symbol is the trading pair symbol, e.g., "WETH/USDT"
 	Start(symbol string)
+
+	SetConfig(amountSize float64, profitThreshold float64)
 }
 
 type ArbServiceImpl struct {
 	dex1 dex.Dex
 	dex2 dex.Dex
+
+	ConfigMutex     *sync.RWMutex
+	AmountSize      float64
+	ProfitThreshold float64
 }
 
 func NewArbService(dex1, dex2 dex.Dex) ArbService {
 	return &ArbServiceImpl{
-		dex1: dex1,
-		dex2: dex2,
+		dex1:        dex1,
+		dex2:        dex2,
+		ConfigMutex: &sync.RWMutex{},
 	}
+}
+
+func (a *ArbServiceImpl) SetConfig(amountSize float64, profitThreshold float64) {
+	if amountSize <= 0 || profitThreshold <= 0 {
+		slog.Error("Invalid configuration values", "amountSize", amountSize, "profitThreshold", profitThreshold)
+		return
+	}
+	a.ConfigMutex.Lock()
+	defer a.ConfigMutex.Unlock()
+	a.AmountSize = amountSize
+	a.ProfitThreshold = profitThreshold
+
 }
 
 func (a *ArbServiceImpl) Start(symbol string) {
@@ -95,15 +114,22 @@ func (a *ArbServiceImpl) performArbitrageTransaction(lastPrice1, lastPrice2 floa
 
 func (a *ArbServiceImpl) IsSpreadProfitable(price1, price2 float64) bool {
 
-	totalFeePercent := (a.dex1.GetPoolFee() + a.dex2.GetPoolFee()) + 0.1
+	feeRatio := (a.dex1.GetPoolFee() + a.dex2.GetPoolFee()) + Slippage
 	buyPrice := math.Min(price1, price2)
 	sellPrice := math.Max(price1, price2)
-	spreadPercent := ((sellPrice - buyPrice) / buyPrice) * 100
-	return spreadPercent >= totalFeePercent
+	spreadRatio := ((sellPrice - buyPrice) / buyPrice)
+	return spreadRatio > feeRatio
 
 }
 
 func (a *ArbServiceImpl) IsProfit(price1, price2 float64) bool {
+
+	a.ConfigMutex.RLock()
+	// Assumes AmountSize is in the quote currency (e.g., USDC).
+	amountSize := a.AmountSize
+	// Assumes ProfitThreshold is also in the quote currency (e.g., USDC).
+	profitThreshold := a.ProfitThreshold
+	a.ConfigMutex.RUnlock()
 
 	buyPrice := 0.0
 	sellPrice := 0.0
@@ -120,29 +146,42 @@ func (a *ArbServiceImpl) IsProfit(price1, price2 float64) bool {
 		sellFee = a.dex2.GetPoolFee()
 		buyFee = a.dex1.GetPoolFee()
 	}
-	// -------BUYING ---------//
-	netBuyingSize := AmountSize - (buyFee * AmountSize)
-	tokenReceived := (1 / buyPrice) * netBuyingSize
+	// -------BUYING (e.g., USDC -> WETH) ---------//
+	// The fee is taken from the input asset (USDC) BEFORE the swap.
+	netUsdcToSwap := amountSize * (1 - buyFee)
+	wethReceived := netUsdcToSwap / buyPrice
 
-	// -------SELLING ---------//
-	netSellingSize := tokenReceived - (sellFee * tokenReceived)
-	baseToken := netSellingSize * sellPrice
+	// -------SELLING (e.g., WETH -> USDC) ---------//
+	// The fee is taken from the input asset (WETH) BEFORE the swap.
+	netWethToSwap := wethReceived * (1 - sellFee)
+	finalUsdcAmount := netWethToSwap * sellPrice
 
-	// -------PROFIT CALCULATION ---------//
+	// -------PROFIT CALCULATION (in USDC) ---------//
+	// For this calculation to be accurate, `TotalGasCost` MUST be converted to,
+	// and the `profitThreshold` MUST be in the same currency.
+	// Since `TotalGasCost` is in USDC, `profitThreshold` should also be in USDC.
+	// The `profitThreshold` is the amount of USDC you want to make.
+	// The `Profit` calculation is `finalUsdcAmount - amountSize - TotalGasCost`.
+	// This means `Profit` is the amount of USDC you make after all fees and gas.
+	// If `Profit` is greater than or equal to `profitThreshold`, it's profitable.
 
-	Profit := baseToken - AmountSize - TotalGasCost
+	Profit := finalUsdcAmount - amountSize - TotalGasCost
 
 	fmt.Println("----------------------------------------------------")
-	slog.Info("Profit calculation",
+	slog.Info("Profit calculation (in USDC)",
 		"buyPrice", buyPrice,
 		"sellPrice", sellPrice,
-		"amountSize", AmountSize,
+		"amountSize_USDC", amountSize,
+		"netUsdcToSwap", netUsdcToSwap,
+		"wethReceived", wethReceived,
+		"netWethToSwap", netWethToSwap,
+		"finalUsdcAmount", finalUsdcAmount,
 		"buyFee", buyFee,
 		"sellFee", sellFee,
 		"Profit", Profit,
-		"profitThreshold", ProfitThreshold)
+		"profitThreshold", a.ProfitThreshold)
 	fmt.Println("----------------------------------------------------")
-	return Profit >= ProfitThreshold
+	return Profit >= profitThreshold
 }
 
 // eg:
