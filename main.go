@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log/slog"
+	"os"
 
 	"github.com/joho/godotenv"
 	"github.com/sagarkarki99/arbitrator/blockchain"
@@ -23,12 +24,12 @@ func main() {
 	cl := blockchain.Connect(blockchain.GetChains()["EthSepolia"])
 	if cl == nil {
 		slog.Error("Shutting down...")
-		return
+		os.Exit(1)
 	}
 	defer func() {
 		if cl != nil {
-		slog.Info("Closing client connection")
-		cl.Close()
+			slog.Info("Closing client connection")
+			cl.Close()
 		}
 	}()
 
