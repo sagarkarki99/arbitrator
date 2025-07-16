@@ -106,7 +106,8 @@ func Connect(network *Network) *ethclient.Client {
 
 	cl, err := ethclient.DialContext(context.Background(), ActiveChain.WsUrl)
 	if err != nil {
-		panic(err)
+		slog.Error("Could not connect", "error", err)
+		return nil
 	}
 
 	slog.Info("Connected to chain",

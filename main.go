@@ -8,6 +8,7 @@ import (
 	"github.com/sagarkarki99/arbitrator/blockchain"
 	"github.com/sagarkarki99/arbitrator/dex"
 	"github.com/sagarkarki99/arbitrator/keychain"
+	"github.com/sagarkarki99/arbitrator/services"
 )
 
 func init() {
@@ -20,26 +21,32 @@ func main() {
 	fmt.Println("Hello arbitrator")
 
 	cl := blockchain.Connect(blockchain.GetChains()["EthSepolia"])
+	if cl == nil {
+		slog.Error("Shutting down...")
+		return
+	}
 	defer func() {
+		if cl != nil {
 		slog.Info("Closing client connection")
 		cl.Close()
+		}
 	}()
 
-	config, _ := dex.GetActiveMarkets("USDC/WETH", dex.Uniswap)
-	fmt.Printf("Pool config: %+v\n", config)
+	// config, _ := dex.GetActiveMarkets("USDC/WETH", dex.Uniswap)
+	// fmt.Printf("Pool config: %+v\n", config)
 
 	kc := keychain.NewKeychainImpl()
 	uniswap := dex.NewUniswapV3Pool(cl, kc)
-	// pancake := dex.NewPancakeswapV2Pool(cl, kc)
-	hash, err := uniswap.Sell(10, "USDC/WETH")
-	if err != nil {
-		slog.Error("Failed to buy tokens", "error", err)
-		return
-	}
+	pancake := dex.NewPancakeswapV2Pool(cl, kc)
+	// hash, err := uniswap.Sell(10, "USDC/WETH")
+	// if err != nil {
+	// 	slog.Error("Failed to buy tokens", "error", err)
+	// 	return
+	// }
 
-	slog.Info("Transaction hash:", "hash", hash)
-	// arbService := services.NewArbService(uniswap, pancake)
-	// arbService.Start("USDC/WETH")
+	// slog.Info("Transaction hash:", "hash", hash)
+	arbService := services.NewArbService(uniswap, pancake)
+	arbService.Start(services.ActiveSymbol)
 
 }
 

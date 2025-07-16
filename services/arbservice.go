@@ -8,7 +8,10 @@ import (
 	"github.com/sagarkarki99/arbitrator/dex"
 )
 
-var Amount = 15.0
+var TotalGasCost = 0.0016
+var AmountSize = 0.001
+var ProfitThreshold = 0.00001 // WETH
+var ActiveSymbol = "USDC/WETH"
 
 type ArbService interface {
 	// Symbol is the trading pair symbol, e.g., "WETH/USDT"
@@ -64,7 +67,8 @@ func (a *ArbServiceImpl) LookOpportunity(asset1, asset2 <-chan *dex.Price) {
 			slog.Info("Received price from dex2", "price", asset2Price.Price)
 			lastPrice2 = asset2Price.Price
 			if lastPrice1 != 0 && a.IsSpreadProfitable(lastPrice1, lastPrice2) && a.IsProfit(lastPrice2, lastPrice1) {
-				// Perform arbitrage transaction
+				a.performArbitrageTransaction(lastPrice1, lastPrice2, asset2Price.Symbol)
+
 			}
 		}
 	}
@@ -73,12 +77,18 @@ func (a *ArbServiceImpl) LookOpportunity(asset1, asset2 <-chan *dex.Price) {
 func (a *ArbServiceImpl) performArbitrageTransaction(lastPrice1, lastPrice2 float64, symbol string) {
 	if math.Min(lastPrice1, lastPrice2) == lastPrice1 {
 		// buy in dex1 and sell in dex2
-		a.dex1.Buy(amountSize, symbol)
-		a.dex2.Sell(amountSize, symbol)
+		// a.dex1.Buy(amountSize, symbol)
+		// a.dex2.Sell(amountSize, symbol)
+		slog.Info("--------------------")
+		slog.Info("Buy DEX1 / SELL DEX 2")
+		slog.Info("--------------------")
 
 	} else {
-		a.dex2.Buy(amountSize, symbol)
-		a.dex1.Sell(amountSize, symbol)
+		slog.Info("--------------------")
+		slog.Info("Buy DEX2 / SELL DEX1")
+		slog.Info("--------------------")
+		// a.dex2.Buy(amountSize, symbol)
+		// a.dex1.Sell(amountSize, symbol)
 		// buy in dex2 and sell in dex1
 	}
 }
@@ -111,7 +121,7 @@ func (a *ArbServiceImpl) IsProfit(price1, price2 float64) bool {
 		buyFee = a.dex1.GetPoolFee()
 	}
 	// -------BUYING ---------//
-	netBuyingSize := amountSize - (buyFee * amountSize)
+	netBuyingSize := AmountSize - (buyFee * AmountSize)
 	tokenReceived := (1 / buyPrice) * netBuyingSize
 
 	// -------SELLING ---------//
@@ -120,24 +130,21 @@ func (a *ArbServiceImpl) IsProfit(price1, price2 float64) bool {
 
 	// -------PROFIT CALCULATION ---------//
 
-	Profit := baseToken - amountSize - totalGasCost
+	Profit := baseToken - AmountSize - TotalGasCost
 
 	fmt.Println("----------------------------------------------------")
 	slog.Info("Profit calculation",
 		"buyPrice", buyPrice,
 		"sellPrice", sellPrice,
-		"amountSize", amountSize,
+		"amountSize", AmountSize,
 		"buyFee", buyFee,
 		"sellFee", sellFee,
 		"Profit", Profit,
-		"profitThreshold", profitThreshold)
+		"profitThreshold", ProfitThreshold)
 	fmt.Println("----------------------------------------------------")
-	return Profit >= profitThreshold
+	return Profit >= ProfitThreshold
 }
 
-var totalGasCost = 0.0016
-var amountSize = 20000.0
-var profitThreshold = 2.00 // USDT
 // eg:
 //  WETH/USDT
 //  price1 = 1000
