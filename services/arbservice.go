@@ -11,7 +11,7 @@ import (
 
 var Slippage = 0.001 // 1% slippage tolerance
 var TotalGasCost = 0.0016
-var ActiveSymbol = "USDC/WETH"
+var ActiveSymbol = "USDT/WBNB"
 
 type ArbService interface {
 	// Symbol is the trading pair symbol, e.g., "WETH/USDT"
@@ -72,7 +72,7 @@ func (a *ArbServiceImpl) LookOpportunity(asset1, asset2 <-chan *dex.Price) {
 			if !isOpen {
 				return
 			}
-			slog.Info("Received price from dex1", "price", asset1Price.Price)
+			slog.Info(fmt.Sprintf("Received price from %s", asset1Price.Pool), "price", asset1Price.Price)
 			lastPrice1 = asset1Price.Price
 			if lastPrice2 != 0 && a.IsSpreadProfitable(lastPrice1, lastPrice2) && a.IsProfit(lastPrice1, lastPrice2) {
 				a.performArbitrageTransaction(lastPrice1, lastPrice2, asset1Price.Symbol)
@@ -83,7 +83,7 @@ func (a *ArbServiceImpl) LookOpportunity(asset1, asset2 <-chan *dex.Price) {
 			if !isOpen {
 				return
 			}
-			slog.Info("Received price from dex2", "price", asset2Price.Price)
+			slog.Info(fmt.Sprintf("Received price from %s", asset2Price.Pool), "price", asset2Price.Price)
 			lastPrice2 = asset2Price.Price
 			if lastPrice1 != 0 && a.IsSpreadProfitable(lastPrice1, lastPrice2) && a.IsProfit(lastPrice2, lastPrice1) {
 				a.performArbitrageTransaction(lastPrice1, lastPrice2, asset2Price.Symbol)
@@ -118,6 +118,12 @@ func (a *ArbServiceImpl) IsSpreadProfitable(price1, price2 float64) bool {
 	buyPrice := math.Min(price1, price2)
 	sellPrice := math.Max(price1, price2)
 	spreadRatio := ((sellPrice - buyPrice) / buyPrice)
+	if spreadRatio > feeRatio {
+		slog.Info("---Profitable-----")
+	} else {
+		slog.Info("---Not profitable---")
+	}
+
 	return spreadRatio > feeRatio
 
 }
