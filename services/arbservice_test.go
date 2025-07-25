@@ -33,7 +33,7 @@ func (m1 MockDex2) GetPrice(symbol string) (<-chan *dex.Price, error) {
 }
 
 func (m1 MockDex2) GetPoolFee() float64 {
-	return 0.003
+	return 0.0025
 }
 
 func (m1 MockDex2) Buy(amount float64, symbol string) (string, error) {
@@ -46,8 +46,14 @@ func (m1 MockDex2) Sell(amount float64, symbol string) (string, error) {
 // Testing for USDT denominated pool i.e for eg: WBNB/USDT
 func TestIsProfit_AsTrue(t *testing.T) {
 	// Arrange
-	mockProfitThreshold := 5.0
-	mockAmountSize := 100.0
+
+	mockOrder := OrderConfig{
+		AmountSize:      100.0,
+		ProfitThreshold: 5.0,
+		Slippage:        0.001,
+		TotalGasCost:    0.0001,
+		ActiveSymbol:    "WBNB/USDT",
+	}
 	mockDex1 := MockDex1{}
 	mockDex2 := MockDex2{}
 	arbService := &ArbServiceImpl{
@@ -57,10 +63,10 @@ func TestIsProfit_AsTrue(t *testing.T) {
 	}
 	// profit = (price1 - price2) - (price1 * dex1.GetPoolFee() + price2 * dex2.GetPoolFee()) - TotalGasCost
 	// profit = 50 - (100 * 0.003)
-	arbService.SetConfig(mockAmountSize, mockProfitThreshold)
+	arbService.SetConfig(mockOrder)
 
-	mockPrice1 := 100.0
-	mockPrice2 := 90.0
+	mockPrice1 := 0.001
+	mockPrice2 := 0.00131
 
 	// Act
 	isProfit := arbService.IsProfit(mockPrice1, mockPrice2)
@@ -81,11 +87,16 @@ func TestIsProfit_AsTrueForNonUSDT(t *testing.T) {
 	mockSize := 0.03
 	mockProfitThreshold := 0.0001
 	service := &ArbServiceImpl{
-		dex1:            MockDex1{},
-		dex2:            MockDex2{},
-		ConfigMutex:     &sync.RWMutex{},
-		AmountSize:      mockSize,
-		ProfitThreshold: mockProfitThreshold,
+		dex1:        MockDex1{},
+		dex2:        MockDex2{},
+		ConfigMutex: &sync.RWMutex{},
+		orderConfig: OrderConfig{
+			AmountSize:      mockSize,
+			ProfitThreshold: mockProfitThreshold,
+			Slippage:        0.001,
+			TotalGasCost:    0.000000016,
+			ActiveSymbol:    "WBNB/ETH",
+		},
 	}
 	mockPrice1 := 0.00130734
 	mockPrice2 := 0.00136
@@ -108,11 +119,16 @@ func TestIsProfit_AsFalseForNonUSDT(t *testing.T) {
 	mockSize := 0.03
 	mockProfitThreshold := 0.0001
 	service := &ArbServiceImpl{
-		dex1:            MockDex1{},
-		dex2:            MockDex2{},
-		ConfigMutex:     &sync.RWMutex{},
-		AmountSize:      mockSize,
-		ProfitThreshold: mockProfitThreshold,
+		dex1:        MockDex1{},
+		dex2:        MockDex2{},
+		ConfigMutex: &sync.RWMutex{},
+		orderConfig: OrderConfig{
+			AmountSize:      mockSize,
+			ProfitThreshold: mockProfitThreshold,
+			Slippage:        0.001,
+			TotalGasCost:    0.0001,
+			ActiveSymbol:    "WBNB/ETH",
+		},
 	}
 	mockPrice1 := 0.00130734
 	mockPrice2 := 0.00131
@@ -130,8 +146,14 @@ func TestIsProfit_AsFalseForNonUSDT(t *testing.T) {
 // Testing for USDT denominated pool i.e for eg: WBNB/USDT
 func TestIsProfit_AsFalse(t *testing.T) {
 	// Arrange
-	mockProfitThreshold := 5.0
-	mockAmountSize := 100.0
+
+	mockOrder := OrderConfig{
+		AmountSize:      100.0,
+		ProfitThreshold: 5.0,
+		Slippage:        0.001,
+		TotalGasCost:    0.000000016,
+		ActiveSymbol:    "WBNB/USDT",
+	}
 	mockDex1 := MockDex1{}
 	mockDex2 := MockDex2{}
 	mockPrice1 := 100.0
@@ -143,7 +165,7 @@ func TestIsProfit_AsFalse(t *testing.T) {
 		ConfigMutex: &sync.RWMutex{},
 	}
 
-	arbService.SetConfig(mockAmountSize, mockProfitThreshold)
+	arbService.SetConfig(mockOrder)
 
 	// Act
 	isProfit := arbService.IsProfit(mockPrice1, mockPrice2)
@@ -165,11 +187,17 @@ func TestIsSpreadProfitable_AsTrue(t *testing.T) {
 		dex2:        MockDex2{},
 		ConfigMutex: &sync.RWMutex{},
 	}
+	mockOrder := OrderConfig{
+		AmountSize:      100.0,
+		ProfitThreshold: 90.0,
+		Slippage:        0.001,
+		TotalGasCost:    0.000000016,
+		ActiveSymbol:    "WBNB/USDT",
+	}
 	mockPrice1 := 100.0
 	mockPrice2 := 99.3
-	mockAmountSize := 100.0
-	mockProfitThreshold := 90.0
-	arbService.SetConfig(mockAmountSize, mockProfitThreshold) // Set amount size and profit threshold
+
+	arbService.SetConfig(mockOrder)
 
 	// Act
 	// total cost should be smaller than price difference
@@ -189,11 +217,16 @@ func TestIsSpreadProfitable_AsFalse(t *testing.T) {
 		dex2:        MockDex2{},
 		ConfigMutex: &sync.RWMutex{},
 	}
-	mockAmountSize := 100.0
-	mockProfitThreshold := 90.0
 	mockPrice1 := 100.0
 	mockPrice2 := 99.5
-	arbService.SetConfig(mockAmountSize, mockProfitThreshold) // Set amount size and profit threshold
+	mockOrder := OrderConfig{
+		AmountSize:      100.0,
+		ProfitThreshold: 90.0,
+		Slippage:        0.001,
+		TotalGasCost:    0.000000016,
+		ActiveSymbol:    "WBNB/USDT",
+	}
+	arbService.SetConfig(mockOrder)
 
 	// Act
 	// total cost should be smaller than price difference

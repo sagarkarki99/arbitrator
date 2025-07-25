@@ -19,7 +19,7 @@ func NewPancakeswapV2Pool(client *ethclient.Client, kc keychain.Keychain) Dex {
 	pool := &PancakeswapV2Pool{
 		cl:          client,
 		subs:        make(map[string]chan *Price),
-		platformFee: 0.002, // 0.2% platform fee
+		platformFee: 0.0025, // 0.25% platform fee
 		kc:          kc,
 	}
 

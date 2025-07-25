@@ -32,8 +32,6 @@ package dex
 //    - Execute swap and return transaction hash
 
 import (
-	"log/slog"
-	"math"
 	"math/big"
 )
 
@@ -72,22 +70,23 @@ func CalculatePrice(sqrtPriceX96 *big.Int, config *PoolConfig, desiredPair strin
 	// The raw price returned by Uniswap is based on integer amounts,
 	// so we need to multiply by 10^(token0Decimals−token1Decimals)
 	// to account for the decimal places of each token.
-	decimalAdjustment := math.Pow(10, float64(config.Token0Decimals-config.Token1Decimals))
-	adjustedPrice := priceFloat64 * decimalAdjustment
+	// decimalAdjustment := math.Pow(10, float64(config.Token0Decimals-config.Token1Decimals))
+	// adjustedPrice := priceFloat64 * decimalAdjustment
 
-	// sqrtPriceX96 gives us token1/token0 ratio
-	// For your pools: WETH/USDT ratio (since WETH=token1, USDT=token0)
+	// // sqrtPriceX96 gives us token1/token0 ratio
+	// // For your pools: WETH/USDT ratio (since WETH=token1, USDT=token0)
 
-	slog.Debug("Price calculation",
-		"token0", config.Token0,
-		"token1", config.Token1,
-		"rawPrice", priceFloat64,
-		"adjustedPrice", adjustedPrice,
-		"desiredPair", desiredPair)
+	// slog.Debug("Price calculation",
+	// 	"token0", config.Token0,
+	// 	"token1", config.Token1,
+	// 	"rawPrice", priceFloat64,
+	// 	"adjustedPrice", adjustedPrice,
+	// 	"desiredPair", desiredPair)
 
-	// adjustedPrice is WETH/USDT (token1/token0)
-	// If desired pair is "WETH/USDT" or "ETH/USDT", return as-is (USDT per WETH)
-	// If desired pair were "USDT/WETH", we'd return 1/adjustedPrice
+	// // adjustedPrice is WETH/USDT (token1/token0)
+	// // If desired pair is "WETH/USDT" or "ETH/USDT", return as-is (USDT per WETH)
+	// // If desired pair were "USDT/WETH", we'd return 1/adjustedPrice
 
-	return adjustedPrice // This gives USDT per WETH
+	// return 1 / adjustedPrice // This gives USDT per WETH
+	return priceFloat64
 }

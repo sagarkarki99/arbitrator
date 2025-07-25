@@ -21,7 +21,7 @@ func main() {
 
 	fmt.Println("Hello arbitrator")
 
-	cl := blockchain.Connect(blockchain.GetChains()["EthSepolia"])
+	cl := blockchain.Connect(blockchain.GetChains()["BscMainnet"])
 	if cl == nil {
 		slog.Error("Shutting down...")
 		os.Exit(1)
@@ -46,8 +46,8 @@ func main() {
 	// }
 
 	// slog.Info("Transaction hash:", "hash", hash)
-	arbService := services.NewArbService(uniswap, pancake)
-	arbService.Start(services.ActiveSymbol)
+	arbService := services.NewArbService(uniswap, pancake, services.DefaultOrderConfig)
+	arbService.Start()
 
 }
 

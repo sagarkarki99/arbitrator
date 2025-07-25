@@ -9,50 +9,61 @@ import (
 	"github.com/sagarkarki99/arbitrator/dex"
 )
 
-var ActiveSymbol = "USDT/WBNB"
-var Slippage = 0.001         // 0.1% slippage tolerance
-var TotalGasCost = 0.00005   // should be in Token1
-var AmountSize = 0.003       // should be in tokne1
-var ProfitThreshold = 0.0001 // should be in tokne1
+var DefaultOrderConfig = OrderConfig{
+	AmountSize:      0.03,
+	ProfitThreshold: 0.001,
+	Slippage:        0.001,
+	TotalGasCost:    0.000000016,
+	ActiveSymbol:    "USDT/WBNB",
+}
+
+type OrderConfig struct {
+	AmountSize      float64
+	ProfitThreshold float64
+	Slippage        float64
+	TotalGasCost    float64
+	ActiveSymbol    string
+}
 
 type ArbService interface {
 	// Symbol is the trading pair symbol, e.g., "WETH/USDT"
-	Start(symbol string)
+	Start()
 
-	SetConfig(amountSize float64, profitThreshold float64)
+	SetConfig(newOrder OrderConfig)
 }
 
 type ArbServiceImpl struct {
 	dex1 dex.Dex
 	dex2 dex.Dex
 
-	ConfigMutex     *sync.RWMutex
-	AmountSize      float64
-	ProfitThreshold float64
+	ConfigMutex *sync.RWMutex
+	orderConfig OrderConfig
 }
 
-func NewArbService(dex1, dex2 dex.Dex) ArbService {
+func NewArbService(dex1, dex2 dex.Dex, config OrderConfig) ArbService {
 	return &ArbServiceImpl{
 		dex1:        dex1,
 		dex2:        dex2,
 		ConfigMutex: &sync.RWMutex{},
-		AmountSize:  AmountSize,
+		orderConfig: config,
 	}
 }
 
-func (a *ArbServiceImpl) SetConfig(amountSize float64, profitThreshold float64) {
-	if amountSize <= 0 || profitThreshold <= 0 {
-		slog.Error("Invalid configuration values", "amountSize", amountSize, "profitThreshold", profitThreshold)
+func (a *ArbServiceImpl) SetConfig(newOrder OrderConfig) {
+	if newOrder.AmountSize <= 0 || newOrder.ProfitThreshold <= 0 {
+		slog.Error("Invalid configuration values", "amountSize", newOrder.AmountSize, "profitThreshold", newOrder.ProfitThreshold)
 		return
 	}
 	a.ConfigMutex.Lock()
 	defer a.ConfigMutex.Unlock()
-	a.AmountSize = amountSize
-	a.ProfitThreshold = profitThreshold
+	a.orderConfig = newOrder
 
 }
 
-func (a *ArbServiceImpl) Start(symbol string) {
+func (a *ArbServiceImpl) Start() {
+	a.ConfigMutex.RLock()
+	symbol := a.orderConfig.ActiveSymbol
+	a.ConfigMutex.RUnlock()
 	price1, err := a.dex1.GetPrice(symbol)
 	if err != nil {
 		slog.Error("Failed to get price from UNISWAP", "error", err)
@@ -62,6 +73,7 @@ func (a *ArbServiceImpl) Start(symbol string) {
 		slog.Error("Failed to get price from PANCAKE", "error", err)
 	}
 
+	// TODO: run this function in separate go routine
 	a.LookOpportunity(price1, price2)
 
 }
@@ -75,7 +87,7 @@ func (a *ArbServiceImpl) LookOpportunity(asset1, asset2 <-chan *dex.Price) {
 			if !isOpen {
 				return
 			}
-			slog.Info(fmt.Sprintf("Received price from %s", asset1Price.Pool), "price", asset1Price.Price)
+			slog.Info(fmt.Sprintf("------- %s", asset1Price.Pool), "price", asset1Price.Price)
 			lastPrice1 = asset1Price.Price
 			if lastPrice2 != 0 && a.IsSpreadProfitable(lastPrice1, lastPrice2) && a.IsProfit(lastPrice1, lastPrice2) {
 				a.performArbitrageTransaction(lastPrice1, lastPrice2, asset1Price.Symbol)
@@ -86,7 +98,7 @@ func (a *ArbServiceImpl) LookOpportunity(asset1, asset2 <-chan *dex.Price) {
 			if !isOpen {
 				return
 			}
-			slog.Info(fmt.Sprintf("Received price from %s", asset2Price.Pool), "price", asset2Price.Price)
+			slog.Info(fmt.Sprintf("------- %s", asset2Price.Pool), "price", asset2Price.Price)
 			lastPrice2 = asset2Price.Price
 			if lastPrice1 != 0 && a.IsSpreadProfitable(lastPrice1, lastPrice2) && a.IsProfit(lastPrice2, lastPrice1) {
 				a.performArbitrageTransaction(lastPrice1, lastPrice2, asset2Price.Symbol)
@@ -117,7 +129,7 @@ func (a *ArbServiceImpl) performArbitrageTransaction(lastPrice1, lastPrice2 floa
 
 func (a *ArbServiceImpl) IsSpreadProfitable(price1, price2 float64) bool {
 
-	feeRatio := (a.dex1.GetPoolFee() + a.dex2.GetPoolFee()) + Slippage
+	feeRatio := (a.dex1.GetPoolFee() + a.dex2.GetPoolFee()) + a.orderConfig.Slippage
 	buyPrice := math.Min(price1, price2)
 	sellPrice := math.Max(price1, price2)
 	spreadRatio := ((sellPrice - buyPrice) / buyPrice)
@@ -135,9 +147,9 @@ func (a *ArbServiceImpl) IsProfit(price1, price2 float64) bool {
 
 	a.ConfigMutex.RLock()
 	// Assumes AmountSize is in the quote currency (e.g., USDC).
-	amountSize := a.AmountSize
+	amountSize := a.orderConfig.AmountSize
 	// Assumes ProfitThreshold is also in the quote currency (e.g., USDC).
-	profitThreshold := a.ProfitThreshold
+	profitThreshold := a.orderConfig.ProfitThreshold
 	a.ConfigMutex.RUnlock()
 
 	buyPrice := 0.0
@@ -174,7 +186,7 @@ func (a *ArbServiceImpl) IsProfit(price1, price2 float64) bool {
 	// This means `Profit` is the amount of USDC you make after all fees and gas.
 	// If `Profit` is greater than or equal to `profitThreshold`, it's profitable.
 
-	Profit := finalUsdcAmount - amountSize - TotalGasCost
+	Profit := finalUsdcAmount - amountSize - a.orderConfig.TotalGasCost
 
 	fmt.Println("----------------------------------------------------")
 	slog.Info("Profit calculation (in USDC)",
@@ -188,7 +200,7 @@ func (a *ArbServiceImpl) IsProfit(price1, price2 float64) bool {
 		"buyFee", buyFee,
 		"sellFee", sellFee,
 		"Profit", Profit,
-		"profitThreshold", a.ProfitThreshold)
+		"profitThreshold", a.orderConfig.ProfitThreshold)
 	fmt.Println("----------------------------------------------------")
 	return Profit >= profitThreshold
 }
