@@ -9,9 +9,11 @@ import (
 	"github.com/sagarkarki99/arbitrator/dex"
 )
 
-var Slippage = 0.001 // 1% slippage tolerance
-var TotalGasCost = 0.0016
 var ActiveSymbol = "USDT/WBNB"
+var Slippage = 0.001         // 0.1% slippage tolerance
+var TotalGasCost = 0.00005   // should be in Token1
+var AmountSize = 0.003       // should be in tokne1
+var ProfitThreshold = 0.0001 // should be in tokne1
 
 type ArbService interface {
 	// Symbol is the trading pair symbol, e.g., "WETH/USDT"
@@ -34,6 +36,7 @@ func NewArbService(dex1, dex2 dex.Dex) ArbService {
 		dex1:        dex1,
 		dex2:        dex2,
 		ConfigMutex: &sync.RWMutex{},
+		AmountSize:  AmountSize,
 	}
 }
 
