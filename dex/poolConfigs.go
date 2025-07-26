@@ -100,6 +100,15 @@ var ChainConfigs = map[string]*NetworkConfig{
 					Token1Decimals: 18,
 					Address:        "0x47a90A2d92A8367A91EfA1906bFc8c1E05bf10c4",
 				},
+				"CAKE/USDT": {
+					Token0:         "CAKE",
+					Token1:         "USDT",
+					Token0Decimals: 18,
+					Token1Decimals: 6,
+					Address:        "0xFe4fe5B4575c036aC6D5cCcFe13660020270e27A",
+					Token0Contract: "0x0E09FaBB73Bd3Ade0a17ECC321fD13a19e81cE82",
+					Token1Contract: "0x55d398326f99059fF775485246999027B3197955",
+				},
 			},
 			Pancakeswap: {
 				"USDT/WBNB": {
@@ -108,6 +117,15 @@ var ChainConfigs = map[string]*NetworkConfig{
 					Token0Decimals: 6,
 					Token1Decimals: 18,
 					Address:        "0x172fcD41E0913e95784454622d1c3724f546f849",
+				},
+				"CAKE/USDT": {
+					Token0:         "CAKE",
+					Token1:         "USDT",
+					Token0Decimals: 18,
+					Token1Decimals: 6,
+					Address:        "0x7f51c8AaA6B0599aBd16674e2b17FEc7a9f674A1",
+					Token0Contract: "0x0E09FaBB73Bd3Ade0a17ECC321fD13a19e81cE82",
+					Token1Contract: "0x55d398326f99059fF775485246999027B3197955",
 				},
 			},
 		},

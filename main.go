@@ -2,8 +2,13 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"log/slog"
+	_ "net/http/pprof"
 	"os"
+	"os/signal"
+	"runtime"
+	"syscall"
 
 	"github.com/joho/godotenv"
 	"github.com/sagarkarki99/arbitrator/blockchain"
@@ -39,16 +44,15 @@ func main() {
 	kc := keychain.NewKeychainImpl()
 	uniswap := dex.NewUniswapV3Pool(cl, kc)
 	pancake := dex.NewPancakeswapV2Pool(cl, kc)
-	// hash, err := uniswap.Sell(10, "USDC/WETH")
-	// if err != nil {
-	// 	slog.Error("Failed to buy tokens", "error", err)
-	// 	return
-	// }
 
-	// slog.Info("Transaction hash:", "hash", hash)
 	arbService := services.NewArbService(uniswap, pancake, services.DefaultOrderConfig)
-	arbService.Start()
+	go arbService.Start()
 
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
+	signalReceived := <-sig
+	log.Println("Goroutines: ", runtime.NumGoroutine())
+	log.Println("Shutting down...", signalReceived.String())
 }
 
 /*

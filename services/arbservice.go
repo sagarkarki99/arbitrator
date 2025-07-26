@@ -10,12 +10,20 @@ import (
 )
 
 var DefaultOrderConfig = OrderConfig{
-	AmountSize:      0.03,
-	ProfitThreshold: 0.001,
+	AmountSize:      22.0,
+	ProfitThreshold: 0.04,
 	Slippage:        0.001,
-	TotalGasCost:    0.000000016,
-	ActiveSymbol:    "USDT/WBNB",
+	TotalGasCost:    0.0001,
+	ActiveSymbol:    "CAKE/USDT",
 }
+
+// var DefaultOrderConfig = OrderConfig{
+// 	AmountSize:      0.05,
+// 	ProfitThreshold: 0.0001,
+// 	Slippage:        0.001,
+// 	TotalGasCost:    0.000000016,
+// 	ActiveSymbol:    "USDT/WBNB",
+// }
 
 type OrderConfig struct {
 	AmountSize      float64
@@ -92,7 +100,6 @@ func (a *ArbServiceImpl) LookOpportunity(asset1, asset2 <-chan *dex.Price) {
 			if lastPrice2 != 0 && a.IsSpreadProfitable(lastPrice1, lastPrice2) && a.IsProfit(lastPrice1, lastPrice2) {
 				a.performArbitrageTransaction(lastPrice1, lastPrice2, asset1Price.Symbol)
 				// Perform arbitrage transaction
-
 			}
 		case asset2Price, isOpen := <-asset2:
 			if !isOpen {
@@ -134,7 +141,7 @@ func (a *ArbServiceImpl) IsSpreadProfitable(price1, price2 float64) bool {
 	sellPrice := math.Max(price1, price2)
 	spreadRatio := ((sellPrice - buyPrice) / buyPrice)
 	if spreadRatio > feeRatio {
-		slog.Info("---Profitable-----")
+		slog.Info("---Profitable ---- LET's Go0o0o0o0o0o0o-----")
 	} else {
 		slog.Info("---Not profitable---")
 	}
